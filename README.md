@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="docs/vgi-logo.png" alt="Vector Gateway Interface (VGI)" width="320">
+</p>
+
+<p align="center"><em>A <a href="https://query.farm">Query.Farm</a> VGI worker for DuckDB.</em></p>
+
 # vgi-google
 
 A [VGI](https://github.com/query-farm/vgi-python) worker that queries **Google
@@ -181,3 +187,12 @@ Worker code is **MIT** (see `LICENSE`). Runtime dependencies
 `google-api-python-client` and `google-auth` are **Apache-2.0**; `httplib2` /
 `google-auth-httplib2` are permissive. **No GPL/AGPL.** Your use of the Google
 APIs themselves is governed by Google's terms, quotas and billing.
+
+---
+
+## Authorship & License
+
+Written by [Query.Farm](https://query.farm) — every VGI worker is designed and built by Query.Farm.
+
+Copyright 2026 Query Farm LLC - https://query.farm
+
