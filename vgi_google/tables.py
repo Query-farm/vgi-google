@@ -138,6 +138,8 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
     _adapter: ClassVar[Adapter] = SheetsAdapter()
 
     class Meta:
+        """Function metadata."""
+
         name = "google_sheet"
         description = "Read a Google Sheets range as rows (values, optional header)"
         categories = ["google", "sheets", "spreadsheet"]
@@ -148,17 +150,19 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
             ),
         ]
 
-
     @classmethod
     def cardinality(cls, params: BindParams[_SheetArgs]) -> TableCardinality:
+        """Estimate the result cardinality."""
         return TableCardinality(estimate=min(params.args.count, 1000), max=params.args.count)
 
     @classmethod
     def initial_state(cls, params: ProcessParams[_SheetArgs]) -> _ScanState:
+        """Create the initial scan state."""
         return _ScanState()
 
     @classmethod
     def process(cls, params: ProcessParams[_SheetArgs], state: _ScanState, out: OutputCollector) -> None:
+        """Emit one page of rows per tick."""
         _run_paged_tick(cls._adapter, params, state, out, require_auth=True)
 
 
@@ -185,6 +189,8 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
     _adapter: ClassVar[Adapter] = DriveAdapter()
 
     class Meta:
+        """Function metadata."""
+
         name = "google_drive"
         description = "List/search Google Drive files as rows"
         categories = ["google", "drive", "files"]
@@ -195,17 +201,19 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
             ),
         ]
 
-
     @classmethod
     def cardinality(cls, params: BindParams[_DriveArgs]) -> TableCardinality:
+        """Estimate the result cardinality."""
         return TableCardinality(estimate=min(params.args.count, 100), max=params.args.count)
 
     @classmethod
     def initial_state(cls, params: ProcessParams[_DriveArgs]) -> _ScanState:
+        """Create the initial scan state."""
         return _ScanState()
 
     @classmethod
     def process(cls, params: ProcessParams[_DriveArgs], state: _ScanState, out: OutputCollector) -> None:
+        """Emit one page of rows per tick."""
         _run_paged_tick(cls._adapter, params, state, out, require_auth=True)
 
 
@@ -234,6 +242,8 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
     _adapter: ClassVar[Adapter] = CalendarAdapter()
 
     class Meta:
+        """Function metadata."""
+
         name = "google_calendar"
         description = "List Google Calendar events as rows"
         categories = ["google", "calendar", "events"]
@@ -244,17 +254,19 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
             ),
         ]
 
-
     @classmethod
     def cardinality(cls, params: BindParams[_CalendarArgs]) -> TableCardinality:
+        """Estimate the result cardinality."""
         return TableCardinality(estimate=min(params.args.count, 250), max=params.args.count)
 
     @classmethod
     def initial_state(cls, params: ProcessParams[_CalendarArgs]) -> _ScanState:
+        """Create the initial scan state."""
         return _ScanState()
 
     @classmethod
     def process(cls, params: ProcessParams[_CalendarArgs], state: _ScanState, out: OutputCollector) -> None:
+        """Emit one page of rows per tick."""
         _run_paged_tick(cls._adapter, params, state, out, require_auth=True)
 
 
@@ -280,6 +292,8 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
     _adapter: ClassVar[Adapter] = YouTubeAdapter()
 
     class Meta:
+        """Function metadata."""
+
         name = "google_youtube"
         description = "Search YouTube videos as rows (with view/like/comment counts)"
         categories = ["google", "youtube", "video"]
@@ -290,17 +304,19 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
             ),
         ]
 
-
     @classmethod
     def cardinality(cls, params: BindParams[_YouTubeArgs]) -> TableCardinality:
+        """Estimate the result cardinality."""
         return TableCardinality(estimate=min(params.args.count, 25), max=params.args.count)
 
     @classmethod
     def initial_state(cls, params: ProcessParams[_YouTubeArgs]) -> _ScanState:
+        """Create the initial scan state."""
         return _ScanState()
 
     @classmethod
     def process(cls, params: ProcessParams[_YouTubeArgs], state: _ScanState, out: OutputCollector) -> None:
+        """Emit one page of rows per tick."""
         _run_paged_tick(cls._adapter, params, state, out, require_auth=True)
 
 
@@ -316,7 +332,7 @@ class _CallArgs:
     api: Annotated[str, Arg(0, doc="Discovery API name, e.g. 'gmail'.")]
     version: Annotated[str, Arg(1, doc="API version, e.g. 'v1'.")]
     method: Annotated[str, Arg(2, doc="Dotted method path, e.g. 'users.messages.list'.")]
-    params_json: Annotated[str, Arg(3, doc="JSON object of method parameters, e.g. '{\"userId\":\"me\"}'.")]
+    params_json: Annotated[str, Arg(3, doc='JSON object of method parameters, e.g. \'{"userId":"me"}\'.')]
     count: Annotated[int, Arg("count", default=1000, doc="Maximum rows to return.", ge=1, le=1_000_000)]
 
 
@@ -334,6 +350,8 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
     FIXED_SCHEMA: ClassVar[pa.Schema] = _CALL_SCHEMA
 
     class Meta:
+        """Function metadata."""
+
         name = "google_call"
         description = "Call any Google API method; returns JSON rows (generic escape hatch)"
         categories = ["google", "generic", "json"]
@@ -346,6 +364,7 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
 
     @classmethod
     def on_bind(cls, params: BindParams[_CallArgs]) -> BindResponse:
+        """Validate ``params_json`` and pin the output schema."""
         # Validate params_json early so a malformed JSON is a clean bind error.
         try:
             parsed = json.loads(params.args.params_json or "{}")
@@ -357,14 +376,17 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
 
     @classmethod
     def cardinality(cls, params: BindParams[_CallArgs]) -> TableCardinality:
+        """Estimate the result cardinality."""
         return TableCardinality(estimate=min(params.args.count, 100), max=params.args.count)
 
     @classmethod
     def initial_state(cls, params: ProcessParams[_CallArgs]) -> _ScanState:
+        """Create the initial scan state."""
         return _ScanState()
 
     @classmethod
     def process(cls, params: ProcessParams[_CallArgs], state: _ScanState, out: OutputCollector) -> None:
+        """Emit one page of rows per tick."""
         a = params.args
         count = a.count
         if state.done or state.emitted >= count:
@@ -376,9 +398,7 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
 
         try:
             method_params = json.loads(a.params_json or "{}")
-            service = client.build_client(
-                a.api, a.version, secrets=params.secrets, scopes=None, require_auth=True
-            )
+            service = client.build_client(a.api, a.version, secrets=params.secrets, scopes=None, require_auth=True)
             request_method = discovery.resolve_method(service, a.method)
             if state.cursor:
                 method_params = {**method_params, "pageToken": state.cursor}
@@ -414,9 +434,7 @@ def _rows_from_payload(payload: Any) -> tuple[list[Any], str | None]:
     """
     next_token = payload.get("nextPageToken") if isinstance(payload, dict) else None
     if isinstance(payload, dict):
-        list_fields = [
-            (k, v) for k, v in payload.items() if isinstance(v, list) and k not in ("etag",)
-        ]
+        list_fields = [(k, v) for k, v in payload.items() if isinstance(v, list) and k not in ("etag",)]
         if len(list_fields) == 1:
             return list(list_fields[0][1]), next_token
     return [payload], next_token
@@ -450,6 +468,8 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
     FIXED_SCHEMA: ClassVar[pa.Schema] = _APIS_SCHEMA
 
     class Meta:
+        """Function metadata."""
+
         name = "google_apis"
         description = "List Google APIs reachable via the Discovery Service"
         categories = ["google", "discovery", "metadata"]
@@ -462,14 +482,17 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
 
     @classmethod
     def cardinality(cls, params: BindParams[_ApisArgs]) -> TableCardinality:
+        """Estimate the result cardinality."""
         return TableCardinality(estimate=300, max=1000)
 
     @classmethod
     def initial_state(cls, params: ProcessParams[_ApisArgs]) -> _ScanState:
+        """Create the initial scan state."""
         return _ScanState()
 
     @classmethod
     def process(cls, params: ProcessParams[_ApisArgs], state: _ScanState, out: OutputCollector) -> None:
+        """Emit one page of rows per tick."""
         if state.done:
             out.finish()
             return
@@ -509,6 +532,8 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
     FIXED_SCHEMA: ClassVar[pa.Schema] = _METHODS_SCHEMA
 
     class Meta:
+        """Function metadata."""
+
         name = "google_methods"
         description = "List the callable methods of a Google API (for google_call)"
         categories = ["google", "discovery", "metadata"]
@@ -521,14 +546,17 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
 
     @classmethod
     def cardinality(cls, params: BindParams[_MethodsArgs]) -> TableCardinality:
+        """Estimate the result cardinality."""
         return TableCardinality(estimate=100, max=2000)
 
     @classmethod
     def initial_state(cls, params: ProcessParams[_MethodsArgs]) -> _ScanState:
+        """Create the initial scan state."""
         return _ScanState()
 
     @classmethod
     def process(cls, params: ProcessParams[_MethodsArgs], state: _ScanState, out: OutputCollector) -> None:
+        """Emit one page of rows per tick."""
         if state.done:
             out.finish()
             return

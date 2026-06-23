@@ -58,6 +58,7 @@ def _maybe_install_mock() -> None:
 
     client.set_http_factory(http_factory)
 
+
 _GOOGLE_CATALOG = Catalog(
     name="google",
     default_schema="main",

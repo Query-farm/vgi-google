@@ -64,6 +64,7 @@ class DriveAdapter:
     schema = SCHEMA
 
     def fetch_page(self, service: Any, args: Any, cursor: str | None) -> Page:
+        """Fetch one page of rows from the API for this adapter."""
         params: dict[str, Any] = {
             "pageSize": max(1, min(getattr(args, "page_size", 0) or 100, 1000)),
             "fields": _FIELDS_MASK,

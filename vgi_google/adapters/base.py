@@ -56,5 +56,9 @@ class Adapter(Protocol):
             args: The parsed table-function arguments dataclass for this adapter.
             cursor: The opaque ``pageToken`` from a previous page, or None to
                 start.
+
+        Returns:
+            A :class:`Page` of mapped rows plus the next cursor (or None when
+            exhausted).
         """
         ...

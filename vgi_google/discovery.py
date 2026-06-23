@@ -25,6 +25,7 @@ the worker never crashes.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import time
@@ -208,10 +209,8 @@ def _set_request_timeout(request: Any, timeout: float) -> None:
     """Best-effort: set the read timeout on the request's http transport."""
     http = getattr(request, "http", None)
     if http is not None:
-        try:
+        with contextlib.suppress(AttributeError, TypeError):
             http.timeout = timeout
-        except (AttributeError, TypeError):
-            pass
 
 
 def _is_quota_error(exc: HttpError) -> bool:

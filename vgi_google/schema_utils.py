@@ -121,7 +121,5 @@ def rows_to_batch(rows: list[dict[str, Any]], schema: pa.Schema) -> pa.RecordBat
     passed-in (projected) schema means projection pushdown works without any
     per-adapter code.
     """
-    arrays = [
-        pa.array([row.get(name) for row in rows], type=schema.field(name).type) for name in schema.names
-    ]
+    arrays = [pa.array([row.get(name) for row in rows], type=schema.field(name).type) for name in schema.names]
     return pa.RecordBatch.from_arrays(arrays, schema=schema)

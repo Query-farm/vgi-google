@@ -21,12 +21,21 @@ from vgi_google.tables import GoogleApisFunction, GoogleMethodsFunction
 
 _APIS_LIST = {
     "items": [
-        {"name": "drive", "version": "v3", "title": "Google Drive API", "preferred": True,
-         "discoveryRestUrl": "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"},
-        {"name": "sheets", "version": "v4", "title": "Google Sheets API", "preferred": True,
-         "discoveryRestUrl": "https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest"},
-        {"name": "calendar", "version": "v3", "title": "Calendar API", "preferred": True,
-         "discoveryRestUrl": "x"},
+        {
+            "name": "drive",
+            "version": "v3",
+            "title": "Google Drive API",
+            "preferred": True,
+            "discoveryRestUrl": "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+        },
+        {
+            "name": "sheets",
+            "version": "v4",
+            "title": "Google Sheets API",
+            "preferred": True,
+            "discoveryRestUrl": "https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest",
+        },
+        {"name": "calendar", "version": "v3", "title": "Calendar API", "preferred": True, "discoveryRestUrl": "x"},
     ]
 }
 

@@ -91,9 +91,7 @@ def test_youtube_enriched(mock_google: None) -> None:
         (GoogleYouTubeFunction, ("q",), {"count": TOTAL, "page_size": 1}),
     ],
 )
-def test_pagetoken_roundtrip_every_row_once(
-    mock_google: None, func: type, positional: tuple, named: dict
-) -> None:
+def test_pagetoken_roundtrip_every_row_once(mock_google: None, func: type, positional: tuple, named: dict) -> None:
     """One item per page; count=TOTAL forces TOTAL paged ticks.
 
     If the pageToken scan state did not round-trip across batches we would either

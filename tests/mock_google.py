@@ -78,8 +78,7 @@ SHEETS_DOC = _doc(
                             "sheets.spreadsheets.values.get",
                             "v4/spreadsheets/{spreadsheetId}/values/{range}",
                             "GET",
-                            {"spreadsheetId": _PATH, "range": _PATH,
-                             "majorDimension": _STR, "valueRenderOption": _STR},
+                            {"spreadsheetId": _PATH, "range": _PATH, "majorDimension": _STR, "valueRenderOption": _STR},
                             ["spreadsheetId", "range"],
                         )
                     }
@@ -100,9 +99,20 @@ DRIVE_DOC = _doc(
                     "drive.files.list",
                     "files",
                     "GET",
-                    {k: _STR for k in (
-                        "q", "pageSize", "pageToken", "fields", "orderBy",
-                        "driveId", "corpora", "includeItemsFromAllDrives", "supportsAllDrives")},
+                    {
+                        k: _STR
+                        for k in (
+                            "q",
+                            "pageSize",
+                            "pageToken",
+                            "fields",
+                            "orderBy",
+                            "driveId",
+                            "corpora",
+                            "includeItemsFromAllDrives",
+                            "supportsAllDrives",
+                        )
+                    },
                     [],
                 )
             }
@@ -121,9 +131,13 @@ CALENDAR_DOC = _doc(
                     "calendar.events.list",
                     "calendars/{calendarId}/events",
                     "GET",
-                    {"calendarId": _PATH, **{k: _STR for k in (
-                        "maxResults", "pageToken", "singleEvents", "orderBy",
-                        "timeMin", "timeMax", "q")}},
+                    {
+                        "calendarId": _PATH,
+                        **{
+                            k: _STR
+                            for k in ("maxResults", "pageToken", "singleEvents", "orderBy", "timeMin", "timeMax", "q")
+                        },
+                    },
                     ["calendarId"],
                 )
             }

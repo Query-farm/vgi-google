@@ -57,6 +57,7 @@ class CalendarAdapter:
     schema = SCHEMA
 
     def fetch_page(self, service: Any, args: Any, cursor: str | None) -> Page:
+        """Fetch one page of rows from the API for this adapter."""
         params: dict[str, Any] = {
             "calendarId": getattr(args, "calendar_id", "primary"),
             "maxResults": max(1, min(getattr(args, "page_size", 0) or 250, 2500)),

@@ -47,6 +47,7 @@ class SheetsAdapter:
     schema = SCHEMA
 
     def fetch_page(self, service: Any, args: Any, cursor: str | None) -> Page:
+        """Fetch one page of rows from the API for this adapter."""
         # Single-shot: a non-None cursor means "already fetched" — return empty.
         if cursor is not None:
             return Page(rows=[], next_cursor=None)

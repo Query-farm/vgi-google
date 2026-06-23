@@ -38,6 +38,7 @@ _APIS_LIST = {
 
 
 def main() -> int:
+    """Run the SQL E2E suite via haybarn-unittest; return its exit code."""
     worker = os.environ.get("VGI_GOOGLE_WORKER")
     if not worker:
         print("ERROR: VGI_GOOGLE_WORKER is not set", file=sys.stderr)

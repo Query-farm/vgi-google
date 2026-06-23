@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from google.auth.credentials import Credentials
@@ -72,6 +72,7 @@ class GoogleAuth:
 
     @property
     def has_any(self) -> bool:
+        """Whether any credential (service account or API key) is present."""
         return self.credentials is not None or self.api_key is not None
 
 
@@ -98,15 +99,18 @@ def _service_account_credentials(
     subject: str | None,
 ) -> Credentials:
     """Build service-account credentials from a JSON key dict or a file path."""
+    # google-auth's service_account factory methods are untyped (the class is
+    # partially typed, so the call isn't swallowed by ignore_missing_imports);
+    # cast the result back to the (typing-only) Credentials protocol.
     from google.oauth2 import service_account
 
     if isinstance(info_or_path, str):
-        creds = service_account.Credentials.from_service_account_file(info_or_path, scopes=scopes)
+        creds = service_account.Credentials.from_service_account_file(info_or_path, scopes=scopes)  # type: ignore[no-untyped-call]
     else:
-        creds = service_account.Credentials.from_service_account_info(info_or_path, scopes=scopes)
+        creds = service_account.Credentials.from_service_account_info(info_or_path, scopes=scopes)  # type: ignore[no-untyped-call]
     if subject:
         creds = creds.with_subject(subject)
-    return creds
+    return cast("Credentials", creds)
 
 
 def _extract_service_account_info(secret: dict[str, Any]) -> dict[str, Any] | None:
@@ -121,7 +125,7 @@ def _extract_service_account_info(secret: dict[str, Any]) -> dict[str, Any] | No
         if key in secret and secret[key] is not None:
             raw = _as_py(secret[key])
             if isinstance(raw, str):
-                return json.loads(raw)
+                return cast("dict[str, Any]", json.loads(raw))
             if isinstance(raw, dict):
                 return raw
     flat = {k: _as_py(v) for k, v in secret.items()}
@@ -141,8 +145,11 @@ def resolve(secrets: Any, *, scopes: list[str] | None = None) -> GoogleAuth:
 
     Resolution order: a ``google_service_account`` secret (or the
     ``VGI_GOOGLE_SERVICE_ACCOUNT_FILE`` env hatch) → a ``google_api_key`` secret
-    (or ``VGI_GOOGLE_API_KEY``). Returns an empty :class:`GoogleAuth` (``has_any``
-    False) when nothing is configured; the caller decides whether that is fatal.
+    (or ``VGI_GOOGLE_API_KEY``).
+
+    Returns:
+        The resolved :class:`GoogleAuth`; an empty one (``has_any`` False) when
+        nothing is configured, leaving the caller to decide whether that is fatal.
     """
     sa_secret = _get_secret(secrets, SECRET_SERVICE_ACCOUNT)
     if sa_secret:
@@ -150,9 +157,7 @@ def resolve(secrets: Any, *, scopes: list[str] | None = None) -> GoogleAuth:
         if info is not None:
             secret_scopes = _scopes_from(sa_secret.get("scopes"))
             subject = _as_py(sa_secret.get("subject")) if "subject" in sa_secret else None
-            creds = _service_account_credentials(
-                info, scopes=scopes or secret_scopes, subject=subject
-            )
+            creds = _service_account_credentials(info, scopes=scopes or secret_scopes, subject=subject)
             return GoogleAuth(credentials=creds)
 
     sa_file = os.environ.get(ENV_SERVICE_ACCOUNT_FILE)

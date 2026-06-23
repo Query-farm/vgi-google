@@ -63,11 +63,14 @@ class _StubService:
         node = self._spec[name]
 
         def factory() -> Any:
-            if isinstance(node, dict) and all(not callable(v) and isinstance(v, dict) for v in node.values()):
-                # Could be a nested resource OR a methods map; disambiguate by
-                # checking whether values look like sub-resources.
-                if all(isinstance(v, dict) and "__methods__" in v for v in node.values()):
-                    return _StubService({k: v["__methods__"] for k, v in node.items()})
+            # Could be a nested resource OR a methods map; disambiguate by
+            # checking whether values look like sub-resources.
+            if (
+                isinstance(node, dict)
+                and all(not callable(v) and isinstance(v, dict) for v in node.values())
+                and all(isinstance(v, dict) and "__methods__" in v for v in node.values())
+            ):
+                return _StubService({k: v["__methods__"] for k, v in node.items()})
             return _Resource(node)
 
         return factory
