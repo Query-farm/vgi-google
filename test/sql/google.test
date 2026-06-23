@@ -1,0 +1,158 @@
+# name: test/sql/google.test
+# description: google_* table functions E2E against the canned mock transport
+# group: [vgi_google]
+#
+# Driven by scripts/run_sql_e2e.py, which launches the worker with
+# VGI_GOOGLE_MOCK=1 (canned, paginated responses; no live Google, no creds) and
+# a temp VGI_GOOGLE_DISCOVERY_DIR for the discovery helpers. The mock serves a
+# deterministic 5 items per paged query, ONE per page, so a count larger than a
+# page forces the pageToken scan state to round-trip across page (batch)
+# boundaries.
+
+require-env VGI_GOOGLE_WORKER
+
+statement ok
+LOAD vgi;
+
+# The JSON extension provides the ->> operator used to read JSON columns.
+statement ok
+INSTALL json;
+
+statement ok
+LOAD json;
+
+statement ok
+ATTACH 'google' AS google (TYPE vgi, LOCATION '${VGI_GOOGLE_WORKER}');
+
+# ============================================================================
+# Schemas: the curated adapters expose their fixed, typed columns.
+# ============================================================================
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM google.google_drive(count := 1));
+----
+13
+
+# parents is a LIST<VARCHAR>.
+query T
+SELECT column_type FROM (DESCRIBE SELECT * FROM google.google_drive(count := 1))
+WHERE column_name = 'parents';
+----
+VARCHAR[]
+
+# modified_time is TIMESTAMPTZ.
+query T
+SELECT column_type FROM (DESCRIBE SELECT * FROM google.google_drive(count := 1))
+WHERE column_name = 'modified_time';
+----
+TIMESTAMP WITH TIME ZONE
+
+# ============================================================================
+# Sheets: values as rows; header := true builds a JSON record per row.
+# ============================================================================
+
+query II
+SELECT row_number, values[1] FROM google.google_sheet('SID', 'Sheet1!A1:B3', header := true) ORDER BY row_number;
+----
+1	Ada
+2	Bob
+
+query T
+SELECT record->>'name' FROM google.google_sheet('SID', 'Sheet1!A1:B3', header := true) ORDER BY row_number LIMIT 1;
+----
+Ada
+
+# ============================================================================
+# CENTERPIECE: pageToken scan-state round-trip across a page boundary.
+#
+# The mock returns ONE item per page; count := 5, page_size := 1 forces FIVE
+# paged ticks. Getting all 5 distinct rows back (ids file0..file4) proves the
+# nextPageToken advanced and was preserved across batches. If scan state did not
+# round-trip, we'd loop on page 0 (dupes) or stop after one row (drops).
+# ============================================================================
+
+query I
+SELECT count(*) FROM google.google_drive(count := 5, page_size := 1);
+----
+5
+
+query I
+SELECT count(DISTINCT id) FROM google.google_drive(count := 5, page_size := 1);
+----
+5
+
+query T
+SELECT id FROM google.google_drive(count := 5, page_size := 1) ORDER BY id;
+----
+file0
+file1
+file2
+file3
+file4
+
+# count caps below what is available: only 2 rows even though 5 exist.
+query I
+SELECT count(*) FROM google.google_drive(count := 2, page_size := 1);
+----
+2
+
+# Calendar paginates the same way; all-day vs timed handled in mapping.
+query I
+SELECT count(*) FROM google.google_calendar(count := 5, page_size := 1);
+----
+5
+
+# YouTube paginates and enriches with statistics from a second call.
+query I
+SELECT count(*) FROM google.google_youtube('duckdb', count := 3, page_size := 1);
+----
+3
+
+query I
+SELECT view_count FROM google.google_youtube('duckdb', count := 1, page_size := 1);
+----
+1000
+
+# ============================================================================
+# Generic escape hatch: any API method -> JSON rows.
+# ============================================================================
+
+query I
+SELECT count(*) FROM google.google_call('gmail', 'v1', 'users.labels.list', '{"userId":"me"}');
+----
+2
+
+query T
+SELECT result->>'name' FROM google.google_call('gmail', 'v1', 'users.labels.list', '{"userId":"me"}')
+ORDER BY result->>'name';
+----
+INBOX
+SENT
+
+# A malformed params_json is a clean error (caught at bind), not a crash.
+statement error
+SELECT * FROM google.google_call('gmail', 'v1', 'users.labels.list', '{bad');
+----
+valid JSON
+
+# ============================================================================
+# Discovery helpers (served from the temp VGI_GOOGLE_DISCOVERY_DIR).
+# ============================================================================
+
+query I
+SELECT count(*) >= 3 FROM google.google_apis();
+----
+true
+
+query T
+SELECT name FROM google.google_apis(name := 'sheet');
+----
+sheets
+
+query T
+SELECT http_method FROM google.google_methods('drive', 'v3') WHERE method = 'files.list';
+----
+GET
+
+statement ok
+DETACH google;
