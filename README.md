@@ -4,7 +4,9 @@
 
 <p align="center"><em>A <a href="https://query.farm">Query.Farm</a> VGI worker for DuckDB.</em></p>
 
-# vgi-google
+# Query Google APIs — Sheets, Drive, Calendar & YouTube in DuckDB
+
+> **vgi-google** · a [Query.Farm](https://query.farm) VGI worker
 
 A [VGI](https://github.com/query-farm/vgi-python) worker that queries **Google
 APIs from DuckDB/SQL**. A discovery-driven core (works against ~any Google REST
