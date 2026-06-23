@@ -1,13 +1,10 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python",
+#     "vgi-python>=0.8.3",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
 # ]
-#
-# [tool.uv.sources]
-# vgi-python = { path = "../vgi-python" }
 # ///
 """VGI worker exposing Google APIs to DuckDB/SQL.
 

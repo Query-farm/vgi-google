@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Database",
 ]
 dependencies = [
-    "vgi-python",
+    "vgi-python>=0.8.3",
     "google-api-python-client>=2.100",
     "google-auth>=2.20",
     "pyarrow",
@@ -41,11 +41,6 @@ dev = [
 
 [project.urls]
 Homepage = "https://query.farm"
-
-[tool.uv.sources]
-# Develop against the local vgi-python checkout (sibling directory). Drop or
-# override this block to resolve vgi-python from an index instead.
-vgi-python = { path = "../vgi-python" }
 
 [build-system]
 requires = ["hatchling"]
