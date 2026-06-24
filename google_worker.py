@@ -99,8 +99,12 @@ _GOOGLE_CATALOG = Catalog(
     comment="Query Google APIs from SQL: Sheets / Drive / Calendar / YouTube + a generic hatch.",
     source_url="https://github.com/Query-farm/vgi-google",
     tags={
-        "vgi.description_llm": _CATALOG_DESCRIPTION_LLM,
-        "vgi.description_md": _CATALOG_DESCRIPTION_MD,
+        "vgi.title": "Google APIs for SQL",
+        "vgi.keywords": (
+            "google, google apis, sheets, drive, calendar, youtube, gmail, discovery, rest api, egress, connector"
+        ),
+        "vgi.doc_llm": _CATALOG_DESCRIPTION_LLM,
+        "vgi.doc_md": _CATALOG_DESCRIPTION_MD,
         "vgi.author": "Query.Farm",
         "vgi.copyright": "Copyright 2026 Query Farm LLC - https://query.farm",
         "vgi.license": "MIT",
@@ -112,8 +116,32 @@ _GOOGLE_CATALOG = Catalog(
             name="main",
             comment="Query Google APIs from SQL: Sheets / Drive / Calendar / YouTube + a generic hatch",
             tags={
-                "vgi.description_llm": _SCHEMA_DESCRIPTION_LLM,
-                "vgi.description_md": _SCHEMA_DESCRIPTION_MD,
+                "vgi.title": "Google API Table Functions",
+                "vgi.keywords": (
+                    "google, sheets, drive, calendar, youtube, google_call, "
+                    "google_apis, google_methods, discovery, rest api"
+                ),
+                "vgi.source_url": ("https://github.com/Query-farm/vgi-google/blob/main/google_worker.py"),
+                "vgi.doc_llm": _SCHEMA_DESCRIPTION_LLM,
+                "vgi.doc_md": _SCHEMA_DESCRIPTION_MD,
+                # VGI123 classifying tags use BARE keys (not vgi.-namespaced).
+                "domain": "productivity",
+                "category": "api-integration",
+                "topic": "google-apis",
+                # VGI506 representative example queries for the schema. The two
+                # discovery functions are public (no credentials), so they run
+                # as written; the curated adapters need a configured secret.
+                "vgi.example_queries": (
+                    "SELECT name, version, title FROM google.main.google_apis() "
+                    "WHERE name LIKE '%sheets%' ORDER BY name LIMIT 5;\n"
+                    "SELECT method, http_method FROM google.main.google_methods('drive', 'v3') "
+                    "ORDER BY method LIMIT 5;\n"
+                    "SELECT * FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);\n"
+                    "SELECT id, name FROM google.main.google_drive("
+                    "query := \"mimeType='application/pdf'\", count := 100);\n"
+                    "SELECT video_id, title, view_count "
+                    "FROM google.main.google_youtube('duckdb', count := 25);"
+                ),
             },
             functions=list(TABLE_FUNCTIONS),
         ),

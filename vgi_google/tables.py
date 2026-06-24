@@ -42,7 +42,26 @@ from vgi_rpc.rpc import OutputCollector
 from . import auth, client, discovery
 from .adapters import CalendarAdapter, DriveAdapter, SheetsAdapter, YouTubeAdapter
 from .adapters.base import Adapter
+from .meta import object_tags
 from .schema_utils import afield, json_field, rows_to_batch
+
+# Guaranteed-runnable, catalog-qualified examples (VGI509 / VGI906). Both queries
+# go through the Google Discovery Service, which is PUBLIC (no credentials), so
+# they execute cleanly against the attached worker without any secret or live
+# data API. We deliberately omit ``expected_result`` — the linter only needs each
+# statement to run, and Google's published API directory changes over time.
+DISCOVERY_EXECUTABLE_EXAMPLES = (
+    "["
+    '{"description": "Discover which Google Sheets APIs are reachable via the public '
+    'Discovery Service.", '
+    '"sql": "SELECT name, version, title FROM google.main.google_apis() '
+    "WHERE name LIKE '%sheets%' ORDER BY name, version LIMIT 5\"}, "
+    '{"description": "List the callable methods of the Drive v3 API to feed into '
+    'google_call.", '
+    "\"sql\": \"SELECT method, http_method FROM google.main.google_methods('drive', 'v3') "
+    'ORDER BY method LIMIT 5"}'
+    "]"
+)
 
 
 @dataclass(kw_only=True)
@@ -149,15 +168,51 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
                 description="Read a sheet range with the first row as headers",
             ),
         ]
-        tags = {
-            "vgi.columns_md": (
+        tags = object_tags(
+            title="Read Google Sheets Range",
+            doc_llm=(
+                "## google_sheet\n\n"
+                "Read a rectangular range from a Google Sheet as SQL rows. Pass the "
+                "**spreadsheet ID** (the long token in the sheet's URL) and an **A1 "
+                "range** such as `Sheet1!A1:Z`. With `header := true` the first row is "
+                "treated as column names and surfaced as a JSON `record` per row; "
+                "otherwise rows come back as a `values` text array.\n\n"
+                "**When to use:** pull tabular data maintained in Sheets (config, "
+                "lookups, hand-curated lists) directly into SQL for joins and "
+                "aggregation. Auth is **service-account-first** (or an API key for a "
+                "publicly shared sheet) resolved via the VGI secret provider — never "
+                "inline.\n\n"
+                "**Inputs:** `spreadsheet_id`, `range`, `header` (default false), "
+                "`count` (row cap). **Outputs:** `row_number`, `values`, `record`. "
+                "Empty trailing cells may be omitted by the API, so rows can be "
+                "ragged; `count` bounds the scan."
+            ),
+            doc_md=(
+                "# google_sheet\n\n"
+                "Reads a Google Sheets A1 range into rows.\n\n"
+                "## Usage\n\n"
+                "```sql\n"
+                "SELECT * FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);\n"
+                "```\n\n"
+                "## Notes\n\n"
+                "- `header := true` names columns from the first row and fills the JSON "
+                "`record` column; otherwise `record` is NULL and cells live in `values`.\n"
+                "- Requires a `google_service_account` secret (or `google_api_key` for a "
+                "publicly shared sheet); the worker is READ-only.\n"
+                "- The API may omit empty trailing cells, so rows can vary in width."
+            ),
+            keywords=(
+                "google sheets, spreadsheet, sheet, range, A1, cells, values, tabular, rows, header, read sheet, gsheet"
+            ),
+            relative_path="vgi_google/tables.py",
+            result_columns_md=(
                 "| column | type | description |\n"
                 "|---|---|---|\n"
                 "| `row_number` | BIGINT | 1-based row index within the range (after any header row). |\n"
                 "| `values` | VARCHAR[] | The row's cells as text. |\n"
                 "| `record` | JSON | When `header := true`, a JSON object of header->cell for this row; else NULL. |"
             ),
-        }
+        )
 
     @classmethod
     def cardinality(cls, params: BindParams[_SheetArgs]) -> TableCardinality:
@@ -209,8 +264,46 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
                 description="List up to 100 PDFs",
             ),
         ]
-        tags = {
-            "vgi.columns_md": (
+        tags = object_tags(
+            title="List and Search Google Drive Files",
+            doc_llm=(
+                "## google_drive\n\n"
+                "List or search Google Drive files and return their metadata as SQL "
+                "rows. The optional `query` argument uses Drive's native **`q` query "
+                "syntax** (e.g. `mimeType='application/pdf'`, "
+                "`name contains 'report'`, `modifiedTime > '2024-01-01'`). Results "
+                "page automatically; `count` caps the total and `order_by` (e.g. "
+                "`modifiedTime desc`) sorts them. Pass `drive_id` to search within a "
+                "Shared Drive.\n\n"
+                "**When to use:** inventory files, find documents by type/name/date, or "
+                "join Drive metadata against other tables. This returns **metadata "
+                "only**, not file contents. Auth is service-account-first via the VGI "
+                "secret provider.\n\n"
+                "**Inputs:** `query`, `count`, `page_size`, `order_by`, `drive_id`. "
+                "**Outputs:** id, name, mime_type, timestamps, size, links, parents, "
+                "owner, and trashed/starred flags."
+            ),
+            doc_md=(
+                "# google_drive\n\n"
+                "Lists and searches Google Drive file metadata.\n\n"
+                "## Usage\n\n"
+                "```sql\n"
+                "SELECT id, name FROM google.main.google_drive(\n"
+                "  query := \"mimeType='application/pdf'\", count := 100);\n"
+                "```\n\n"
+                "## Notes\n\n"
+                "- `query` is Drive's `q` syntax; `order_by` takes keys like "
+                "`modifiedTime desc`.\n"
+                "- Returns metadata only (no file bytes); use `drive_id` for Shared "
+                "Drives.\n"
+                "- Requires a `google_service_account` secret; the worker is READ-only."
+            ),
+            keywords=(
+                "google drive, files, file search, drive query, mime type, folders, "
+                "documents, metadata, shared drive, list files"
+            ),
+            relative_path="vgi_google/tables.py",
+            result_columns_md=(
                 "| column | type | description |\n"
                 "|---|---|---|\n"
                 "| `id` | VARCHAR | Drive file ID. |\n"
@@ -226,7 +319,7 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
                 "| `trashed` | BOOLEAN | Whether the file is in the trash. |\n"
                 "| `starred` | BOOLEAN | Whether the file is starred. |"
             ),
-        }
+        )
 
     @classmethod
     def cardinality(cls, params: BindParams[_DriveArgs]) -> TableCardinality:
@@ -280,8 +373,46 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
                 description="List up to 50 events on the primary calendar",
             ),
         ]
-        tags = {
-            "vgi.columns_md": (
+        tags = object_tags(
+            title="List Google Calendar Events",
+            doc_llm=(
+                "## google_calendar\n\n"
+                "List events from a Google Calendar as SQL rows. Defaults to the "
+                "`primary` calendar; pass `calendar_id` (an address or ID) to target "
+                "another. Bound the window with `time_min` / `time_max` (a date or "
+                "RFC-3339 timestamp) and free-text filter with `query`. With "
+                "`single_events := true` (the default) recurring events are expanded "
+                "into individual instances; set it false to see the recurring master.\n\n"
+                "**When to use:** pull schedule data into SQL to count meetings, find "
+                "events in a date range, or join calendar activity with other data. "
+                "All-day events have NULL `start_time`/`end_time` and `all_day = true`. "
+                "Auth is service-account-first via the VGI secret provider.\n\n"
+                "**Inputs:** `calendar_id`, `time_min`, `time_max`, `query`, `count`, "
+                "`page_size`, `single_events`. **Outputs:** id, summary, description, "
+                "location, status, start/end timestamps, all_day, organizer, creator, "
+                "and an HTML link."
+            ),
+            doc_md=(
+                "# google_calendar\n\n"
+                "Lists Google Calendar events.\n\n"
+                "## Usage\n\n"
+                "```sql\n"
+                "SELECT id, summary, start_time\n"
+                "FROM google.main.google_calendar(calendar_id := 'primary', count := 50);\n"
+                "```\n\n"
+                "## Notes\n\n"
+                "- `single_events := true` (default) expands recurring events into "
+                "instances.\n"
+                "- All-day events report `all_day = true` with NULL start/end "
+                "timestamps.\n"
+                "- Requires a `google_service_account` secret; the worker is READ-only."
+            ),
+            keywords=(
+                "google calendar, events, schedule, meetings, appointments, calendar "
+                "events, time range, recurring, agenda, ical"
+            ),
+            relative_path="vgi_google/tables.py",
+            result_columns_md=(
                 "| column | type | description |\n"
                 "|---|---|---|\n"
                 "| `id` | VARCHAR | Event ID. |\n"
@@ -296,7 +427,7 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
                 "| `creator` | VARCHAR | Creator e-mail, when present. |\n"
                 "| `html_link` | VARCHAR | A link to the event in the Calendar UI. |"
             ),
-        }
+        )
 
     @classmethod
     def cardinality(cls, params: BindParams[_CalendarArgs]) -> TableCardinality:
@@ -347,8 +478,44 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
                 description="Search YouTube for 'duckdb'",
             ),
         ]
-        tags = {
-            "vgi.columns_md": (
+        tags = object_tags(
+            title="Search YouTube Videos",
+            doc_llm=(
+                "## google_youtube\n\n"
+                "Search YouTube for videos matching a query and return each hit with "
+                "its engagement statistics as SQL rows. The first positional argument "
+                "is the **search query**; `order` controls ranking "
+                "(`relevance`, `date`, `viewCount`, `rating`) and `count` caps the "
+                "results. Each row carries the video's title, channel, publish time, "
+                "duration, and view/like/comment counts.\n\n"
+                "**When to use:** analyze video reach, find recent uploads on a topic, "
+                "or rank content by views/likes. Auth is by **API key** "
+                "(`google_api_key`) via the VGI secret provider — YouTube Data API is "
+                "public. Statistics columns can be NULL when a video hides them.\n\n"
+                "**Inputs:** `query`, `count`, `page_size`, `order`. **Outputs:** "
+                "video_id, title, description, channel, published_at, view/like/comment "
+                "counts, duration, and the watch URL."
+            ),
+            doc_md=(
+                "# google_youtube\n\n"
+                "Searches YouTube videos with engagement statistics.\n\n"
+                "## Usage\n\n"
+                "```sql\n"
+                "SELECT video_id, title, view_count\n"
+                "FROM google.main.google_youtube('duckdb', count := 25);\n"
+                "```\n\n"
+                "## Notes\n\n"
+                "- `order` accepts `relevance` (default), `date`, `viewCount`, or "
+                "`rating`.\n"
+                "- Requires a `google_api_key` secret (YouTube Data API v3).\n"
+                "- View/like/comment counts are NULL when a creator hides them."
+            ),
+            keywords=(
+                "youtube, video search, videos, views, likes, comments, channel, "
+                "engagement, statistics, youtube data api"
+            ),
+            relative_path="vgi_google/tables.py",
+            result_columns_md=(
                 "| column | type | description |\n"
                 "|---|---|---|\n"
                 "| `video_id` | VARCHAR | YouTube video ID. |\n"
@@ -363,7 +530,7 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
                 "| `duration` | VARCHAR | ISO-8601 duration (e.g. `PT4M13S`), when available. |\n"
                 "| `url` | VARCHAR | Canonical watch URL. |"
             ),
-        }
+        )
 
     @classmethod
     def cardinality(cls, params: BindParams[_YouTubeArgs]) -> TableCardinality:
@@ -422,14 +589,51 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
                 description="List Gmail labels via the generic hatch",
             ),
         ]
-        tags = {
-            "vgi.columns_md": (
+        tags = object_tags(
+            title="Call Any Google API Method",
+            doc_llm=(
+                "## google_call\n\n"
+                "The generic escape hatch: invoke **any** Google REST API method "
+                "(beyond the curated adapters) and get its JSON response as SQL rows. "
+                "Provide the discovery `api` name (e.g. `gmail`), the `version` (e.g. "
+                "`v1`), the dotted `method` path (e.g. `users.messages.list`), and a "
+                "`params_json` JSON object of method parameters.\n\n"
+                "Row shaping is automatic: if the response has exactly one list-valued "
+                "field (e.g. `files`, `items`, `messages`), **each element becomes a "
+                "row**; otherwise the whole response is a single JSON row. "
+                "`nextPageToken` is followed transparently and `count` caps total "
+                "rows.\n\n"
+                "**When to use:** reach a Google surface that has no dedicated adapter "
+                "here. Discover what to pass with `google_apis()` and "
+                "`google_methods(api, version)`. Auth is service-account-first via the "
+                "VGI secret provider; parse the JSON with the DuckDB `json` extension "
+                "(`result ->> '$.field'`). Parameters are validated at bind time, so "
+                "malformed `params_json` is a clean error."
+            ),
+            doc_md=(
+                "# google_call\n\n"
+                "Calls any Google API method and returns JSON rows.\n\n"
+                "## Usage\n\n"
+                "```sql\n"
+                "SELECT * FROM google.main.google_call(\n"
+                "  'gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}');\n"
+                "```\n\n"
+                "## Notes\n\n"
+                "- A single list field in the response is expanded to one row per "
+                "element; otherwise the whole response is one row.\n"
+                "- `nextPageToken` is followed automatically; `count` bounds the scan.\n"
+                "- Use `google_apis()` / `google_methods()` to discover api/version/"
+                "method, and the `json` extension to read the `result` column."
+            ),
+            keywords=("google api, generic, escape hatch, rest api, json, gmail, call method, discovery, any api, raw"),
+            relative_path="vgi_google/tables.py",
+            result_columns_md=(
                 "| column | type | description |\n"
                 "|---|---|---|\n"
                 "| `result` | JSON | One result object as JSON. If the response has a single list field "
                 "(e.g. `files`, `items`, `messages`), each element is a row; otherwise the whole response is one row. |"
             ),
-        }
+        )
 
     @classmethod
     def on_bind(cls, params: BindParams[_CallArgs]) -> BindResponse:
@@ -548,8 +752,43 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
                 description="Find the Sheets API and its versions",
             ),
         ]
-        tags = {
-            "vgi.columns_md": (
+        tags = object_tags(
+            title="Discover Reachable Google APIs",
+            doc_llm=(
+                "## google_apis\n\n"
+                "List the Google APIs reachable through the public **Discovery "
+                "Service**, one row per API/version. The optional `name` argument is a "
+                "case-insensitive substring filter on the API name. Use the returned "
+                "`name` and `version` as the first two arguments to `google_call`, and "
+                "feed `version` into `google_methods` to see what each API can do.\n\n"
+                "**When to use:** explore the breadth of Google's APIs before writing a "
+                "`google_call`, or check whether a given service is reachable. This "
+                "reads Google's **public** API directory — no credentials are required "
+                "— so it works even without a configured secret.\n\n"
+                "**Inputs:** `name` (optional substring filter). **Outputs:** name, "
+                "version, human-readable title, whether the version is preferred, and "
+                "the discovery document URL."
+            ),
+            doc_md=(
+                "# google_apis\n\n"
+                "Lists Google APIs reachable via the Discovery Service.\n\n"
+                "## Usage\n\n"
+                "```sql\n"
+                "SELECT name, version, title\n"
+                "FROM google.main.google_apis() WHERE name LIKE '%sheets%';\n"
+                "```\n\n"
+                "## Notes\n\n"
+                "- Reads Google's public API directory; no credentials needed.\n"
+                "- Pair with `google_methods(api, version)` and `google_call` to invoke "
+                "any listed API.\n"
+                "- `name` is an optional case-insensitive substring filter."
+            ),
+            keywords=(
+                "google apis, discovery, api directory, list apis, available apis, "
+                "reachable, services, metadata, introspection"
+            ),
+            relative_path="vgi_google/tables.py",
+            result_columns_md=(
                 "| column | type | description |\n"
                 "|---|---|---|\n"
                 "| `name` | VARCHAR | API name to pass as the first google_call argument. |\n"
@@ -558,7 +797,8 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
                 "| `preferred` | BOOLEAN | Whether this is the preferred version of the API. |\n"
                 "| `discovery_url` | VARCHAR | URL of the API's discovery document. |"
             ),
-        }
+            executable_examples=DISCOVERY_EXECUTABLE_EXAMPLES,
+        )
 
     @classmethod
     def cardinality(cls, params: BindParams[_ApisArgs]) -> TableCardinality:
@@ -623,8 +863,43 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
                 description="List Drive v3 methods reachable via google_call",
             ),
         ]
-        tags = {
-            "vgi.columns_md": (
+        tags = object_tags(
+            title="List Google API Methods",
+            doc_llm=(
+                "## google_methods\n\n"
+                "List the callable methods of a single Google API, one row per method, "
+                "by reading that API's **discovery document**. Provide the discovery "
+                "`api` name (e.g. `drive`) and `version` (e.g. `v3`). Each row gives "
+                "the dotted method path to pass to `google_call`, its HTTP verb, URL "
+                "path template, description, and the full and required parameter "
+                "names.\n\n"
+                "**When to use:** figure out exactly what `method` path and parameters "
+                "to give `google_call` for an API you discovered via `google_apis()`. "
+                "This reads Google's **public** discovery documents — no credentials "
+                "required.\n\n"
+                "**Inputs:** `api`, `version`. **Outputs:** method path, http_method, "
+                "path template, description, and parameter / required-parameter lists."
+            ),
+            doc_md=(
+                "# google_methods\n\n"
+                "Lists the callable methods of one Google API.\n\n"
+                "## Usage\n\n"
+                "```sql\n"
+                "SELECT method, http_method\n"
+                "FROM google.main.google_methods('drive', 'v3');\n"
+                "```\n\n"
+                "## Notes\n\n"
+                "- Reads the API's public discovery document; no credentials needed.\n"
+                "- The `method` column is the dotted path to pass to `google_call`.\n"
+                "- `required_parameters` lists the parameters `google_call` must "
+                "receive in `params_json`."
+            ),
+            keywords=(
+                "google api methods, discovery, methods, endpoints, api surface, "
+                "parameters, dotted path, introspection, google_call"
+            ),
+            relative_path="vgi_google/tables.py",
+            result_columns_md=(
                 "| column | type | description |\n"
                 "|---|---|---|\n"
                 "| `method` | VARCHAR | Dotted method path to pass to google_call. |\n"
@@ -634,7 +909,7 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
                 "| `parameters` | VARCHAR[] | Parameter names. |\n"
                 "| `required_parameters` | VARCHAR[] | Required parameter names. |"
             ),
-        }
+        )
 
     @classmethod
     def cardinality(cls, params: BindParams[_MethodsArgs]) -> TableCardinality:
