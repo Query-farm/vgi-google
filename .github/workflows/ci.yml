@@ -89,11 +89,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   integration:
-    name: End-to-end SQL on ${{ matrix.os }}
+    name: SQL E2E (${{ matrix.transport }}) on ${{ matrix.os }}
     needs: resolve-haybarn
     strategy:
       fail-fast: false
       matrix:
+        # Run the SAME sqllogictest suite over every VGI transport. The vgi
+        # extension picks the transport from the ATTACH LOCATION string that
+        # run-integration.sh builds per $TRANSPORT. Offline mocking
+        # (VGI_GOOGLE_MOCK=1 + a temp VGI_GOOGLE_DISCOVERY_DIR) is exported by
+        # the script and inherited by the worker for ALL transports — no live
+        # Google, no separate mock server:
+        #   subprocess : `.venv/bin/python google_worker.py` (stdio)
+        #   http       : `http://127.0.0.1:<port>`   (worker booted with --http)
+        #   unix       : `unix://<sock>`             (worker booted with --unix)
+        os: [ubuntu-latest, macos-latest]
+        transport: [subprocess, http, unix]
         include:
           - { os: ubuntu-latest, asset: haybarn_unittest-linux-amd64.zip }
           - { os: macos-latest,  asset: haybarn_unittest-osx-arm64.zip }
@@ -101,6 +112,8 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      TRANSPORT: ${{ matrix.transport }}
     steps:
       - uses: actions/checkout@v6
 
@@ -110,8 +123,10 @@ jobs:
       - name: Set up Python 3.13
         run: uv python install 3.13
 
-      - name: Install the worker (from the lockfile)
-        run: uv sync --frozen --python 3.13
+      - name: Install the worker (from the lockfile, with the http extra)
+        # The `http` extra pulls in waitress so the worker can serve `--http`.
+        # Harmless for the subprocess/unix legs; required for the http leg.
+        run: uv sync --frozen --python 3.13 --extra http
 
       - name: Download haybarn-unittest
         run: |
@@ -130,11 +145,12 @@ jobs:
           # invoking the runner, so relative paths would not resolve. The worker
           # runs from the synced .venv (deps resolved from PyPI via the lockfile);
           # plain `.venv/bin/python` ignores the PEP 723 header. run-integration.sh
-          # enables the mock transport (VGI_GOOGLE_MOCK=1) + offline discovery dir.
+          # enables the mock transport (VGI_GOOGLE_MOCK=1) + offline discovery dir
+          # for every transport and (for http/unix) boots the worker from WORKER_CMD.
           UNITTEST="$PWD/$(find hb -name 'haybarn-unittest' -type f | head -1)"
           chmod +x "$UNITTEST"
           echo "HAYBARN_UNITTEST=$UNITTEST" >> "$GITHUB_ENV"
-          echo "VGI_GOOGLE_WORKER=$PWD/.venv/bin/python $PWD/google_worker.py" >> "$GITHUB_ENV"
+          echo "WORKER_CMD=$PWD/.venv/bin/python $PWD/google_worker.py" >> "$GITHUB_ENV"
 
-      - name: Run extension integration suite
+      - name: Run extension integration suite (${{ matrix.transport }})
         run: ci/run-integration.sh
