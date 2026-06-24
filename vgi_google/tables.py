@@ -145,10 +145,19 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
         categories = ["google", "sheets", "spreadsheet"]
         examples = [
             FunctionExample(
-                sql="SELECT * FROM google_sheet('1AbC...', 'Sheet1!A1:Z', header := true)",
+                sql="SELECT * FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true)",
                 description="Read a sheet range with the first row as headers",
             ),
         ]
+        tags = {
+            "vgi.columns_md": (
+                "| column | type | description |\n"
+                "|---|---|---|\n"
+                "| `row_number` | BIGINT | 1-based row index within the range (after any header row). |\n"
+                "| `values` | VARCHAR[] | The row's cells as text. |\n"
+                "| `record` | JSON | When `header := true`, a JSON object of header->cell for this row; else NULL. |"
+            ),
+        }
 
     @classmethod
     def cardinality(cls, params: BindParams[_SheetArgs]) -> TableCardinality:
@@ -196,10 +205,28 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
         categories = ["google", "drive", "files"]
         examples = [
             FunctionExample(
-                sql="SELECT id, name FROM google_drive(query := \"mimeType='application/pdf'\", count := 100)",
+                sql="SELECT id, name FROM google.main.google_drive(query := \"mimeType='application/pdf'\", count := 100)",  # noqa: E501
                 description="List up to 100 PDFs",
             ),
         ]
+        tags = {
+            "vgi.columns_md": (
+                "| column | type | description |\n"
+                "|---|---|---|\n"
+                "| `id` | VARCHAR | Drive file ID. |\n"
+                "| `name` | VARCHAR | File name. |\n"
+                "| `mime_type` | VARCHAR | MIME type (e.g. `application/pdf`). |\n"
+                "| `modified_time` | TIMESTAMPTZ | Last modification time. |\n"
+                "| `created_time` | TIMESTAMPTZ | Creation time. |\n"
+                "| `size` | BIGINT | Size in bytes, when the file has a binary content size. |\n"
+                "| `web_view_link` | VARCHAR | A link to open the file in a browser. |\n"
+                "| `icon_link` | VARCHAR | A link to the file's icon. |\n"
+                "| `parents` | VARCHAR[] | Parent folder IDs. |\n"
+                "| `owner` | VARCHAR | Primary owner display name, when available. |\n"
+                "| `trashed` | BOOLEAN | Whether the file is in the trash. |\n"
+                "| `starred` | BOOLEAN | Whether the file is starred. |"
+            ),
+        }
 
     @classmethod
     def cardinality(cls, params: BindParams[_DriveArgs]) -> TableCardinality:
@@ -249,10 +276,27 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
         categories = ["google", "calendar", "events"]
         examples = [
             FunctionExample(
-                sql="SELECT id, summary, start_time FROM google_calendar(calendar_id := 'primary', count := 50)",
+                sql="SELECT id, summary, start_time FROM google.main.google_calendar(calendar_id := 'primary', count := 50)",  # noqa: E501
                 description="List up to 50 events on the primary calendar",
             ),
         ]
+        tags = {
+            "vgi.columns_md": (
+                "| column | type | description |\n"
+                "|---|---|---|\n"
+                "| `id` | VARCHAR | Event ID. |\n"
+                "| `summary` | VARCHAR | Event title/summary. |\n"
+                "| `description` | VARCHAR | Event description / notes. |\n"
+                "| `location` | VARCHAR | Free-text event location. |\n"
+                "| `status` | VARCHAR | Event status (`confirmed`, `tentative`, `cancelled`). |\n"
+                "| `start_time` | TIMESTAMPTZ | Start as a UTC timestamp; NULL for all-day events. |\n"
+                "| `end_time` | TIMESTAMPTZ | End as a UTC timestamp; NULL for all-day events. |\n"
+                "| `all_day` | BOOLEAN | True when the event is an all-day (date-only) event. |\n"
+                "| `organizer` | VARCHAR | Organizer e-mail, when present. |\n"
+                "| `creator` | VARCHAR | Creator e-mail, when present. |\n"
+                "| `html_link` | VARCHAR | A link to the event in the Calendar UI. |"
+            ),
+        }
 
     @classmethod
     def cardinality(cls, params: BindParams[_CalendarArgs]) -> TableCardinality:
@@ -299,10 +343,27 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
         categories = ["google", "youtube", "video"]
         examples = [
             FunctionExample(
-                sql="SELECT video_id, title, view_count FROM google_youtube('duckdb', count := 25)",
+                sql="SELECT video_id, title, view_count FROM google.main.google_youtube('duckdb', count := 25)",
                 description="Search YouTube for 'duckdb'",
             ),
         ]
+        tags = {
+            "vgi.columns_md": (
+                "| column | type | description |\n"
+                "|---|---|---|\n"
+                "| `video_id` | VARCHAR | YouTube video ID. |\n"
+                "| `title` | VARCHAR | Video title. |\n"
+                "| `description` | VARCHAR | Video description snippet. |\n"
+                "| `channel_title` | VARCHAR | Channel display name. |\n"
+                "| `channel_id` | VARCHAR | Channel ID. |\n"
+                "| `published_at` | TIMESTAMPTZ | Publication time. |\n"
+                "| `view_count` | BIGINT | View count, when statistics are available. |\n"
+                "| `like_count` | BIGINT | Like count, when statistics are available. |\n"
+                "| `comment_count` | BIGINT | Comment count, when statistics are available. |\n"
+                "| `duration` | VARCHAR | ISO-8601 duration (e.g. `PT4M13S`), when available. |\n"
+                "| `url` | VARCHAR | Canonical watch URL. |"
+            ),
+        }
 
     @classmethod
     def cardinality(cls, params: BindParams[_YouTubeArgs]) -> TableCardinality:
@@ -357,10 +418,18 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
         categories = ["google", "generic", "json"]
         examples = [
             FunctionExample(
-                sql="SELECT * FROM google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}')",
+                sql="SELECT * FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}')",
                 description="List Gmail labels via the generic hatch",
             ),
         ]
+        tags = {
+            "vgi.columns_md": (
+                "| column | type | description |\n"
+                "|---|---|---|\n"
+                "| `result` | JSON | One result object as JSON. If the response has a single list field "
+                "(e.g. `files`, `items`, `messages`), each element is a row; otherwise the whole response is one row. |"
+            ),
+        }
 
     @classmethod
     def on_bind(cls, params: BindParams[_CallArgs]) -> BindResponse:
@@ -475,10 +544,21 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
         categories = ["google", "discovery", "metadata"]
         examples = [
             FunctionExample(
-                sql="SELECT name, version, title FROM google_apis() WHERE name LIKE '%sheets%'",
+                sql="SELECT name, version, title FROM google.main.google_apis() WHERE name LIKE '%sheets%'",
                 description="Find the Sheets API and its versions",
             ),
         ]
+        tags = {
+            "vgi.columns_md": (
+                "| column | type | description |\n"
+                "|---|---|---|\n"
+                "| `name` | VARCHAR | API name to pass as the first google_call argument. |\n"
+                "| `version` | VARCHAR | API version. |\n"
+                "| `title` | VARCHAR | Human-readable API title. |\n"
+                "| `preferred` | BOOLEAN | Whether this is the preferred version of the API. |\n"
+                "| `discovery_url` | VARCHAR | URL of the API's discovery document. |"
+            ),
+        }
 
     @classmethod
     def cardinality(cls, params: BindParams[_ApisArgs]) -> TableCardinality:
@@ -539,10 +619,22 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
         categories = ["google", "discovery", "metadata"]
         examples = [
             FunctionExample(
-                sql="SELECT method, http_method FROM google_methods('drive', 'v3')",
+                sql="SELECT method, http_method FROM google.main.google_methods('drive', 'v3')",
                 description="List Drive v3 methods reachable via google_call",
             ),
         ]
+        tags = {
+            "vgi.columns_md": (
+                "| column | type | description |\n"
+                "|---|---|---|\n"
+                "| `method` | VARCHAR | Dotted method path to pass to google_call. |\n"
+                "| `http_method` | VARCHAR | HTTP verb (GET/POST/...). |\n"
+                "| `path` | VARCHAR | URL path template. |\n"
+                "| `description` | VARCHAR | Method description. |\n"
+                "| `parameters` | VARCHAR[] | Parameter names. |\n"
+                "| `required_parameters` | VARCHAR[] | Required parameter names. |"
+            ),
+        }
 
     @classmethod
     def cardinality(cls, params: BindParams[_MethodsArgs]) -> TableCardinality:

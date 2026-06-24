@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http]>=0.8.3",
+#     "vgi-python[http]>=0.8.4",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
 # ]
@@ -59,13 +59,62 @@ def _maybe_install_mock() -> None:
     client.set_http_factory(http_factory)
 
 
+_CATALOG_DESCRIPTION_LLM = (
+    "Query Google's REST APIs from SQL as table functions. Curated READ adapters cover the "
+    "high-demand surfaces: read a Google Sheets range as rows (google_sheet), list/search Google "
+    "Drive files (google_drive), list Google Calendar events (google_calendar), and search YouTube "
+    "videos with view/like/comment counts (google_youtube). A generic escape hatch (google_call) "
+    "invokes any Google API method and returns its JSON rows, while google_apis and google_methods "
+    "let you discover which APIs and methods are reachable. Use it to pull spreadsheet data, file "
+    "metadata, calendar events, and video statistics into SQL, or to reach any other Google REST "
+    "API. Auth is service-account-first (API key for public APIs) via the VGI secret provider; "
+    "the worker is READ-only and quotas/billing live in Google's APIs."
+)
+
+_CATALOG_DESCRIPTION_MD = (
+    "# google\n\n"
+    "Query Google APIs from DuckDB/SQL as VGI table functions.\n\n"
+    "Curated READ adapters: `google_sheet` (Sheets ranges), `google_drive` (Drive files), "
+    "`google_calendar` (Calendar events), `google_youtube` (YouTube search). Generic hatch: "
+    "`google_call` (any Google API method, JSON rows). Discovery: `google_apis`, `google_methods`.\n\n"
+    "Auth is service-account-first (API key for public APIs) via the VGI secret provider. The "
+    "connector is READ-only; quotas, billing and Google's ToS are the operator's responsibility."
+)
+
+_SCHEMA_DESCRIPTION_LLM = (
+    "Google API table functions: read Sheets ranges (google_sheet), list/search Drive files "
+    "(google_drive), list Calendar events (google_calendar), search YouTube videos (google_youtube), "
+    "call any Google API method (google_call), and discover reachable APIs/methods (google_apis, "
+    "google_methods)."
+)
+
+_SCHEMA_DESCRIPTION_MD = (
+    "Google API table functions over the Discovery Service: curated Sheets/Drive/Calendar/YouTube "
+    "READ adapters, a generic `google_call` hatch, and `google_apis` / `google_methods` discovery."
+)
+
 _GOOGLE_CATALOG = Catalog(
     name="google",
     default_schema="main",
+    comment="Query Google APIs from SQL: Sheets / Drive / Calendar / YouTube + a generic hatch.",
+    source_url="https://github.com/Query-farm/vgi-google",
+    tags={
+        "vgi.description_llm": _CATALOG_DESCRIPTION_LLM,
+        "vgi.description_md": _CATALOG_DESCRIPTION_MD,
+        "vgi.author": "Query.Farm",
+        "vgi.copyright": "Copyright 2026 Query Farm LLC - https://query.farm",
+        "vgi.license": "MIT",
+        "vgi.support_contact": "https://github.com/Query-farm/vgi-google/issues",
+        "vgi.support_policy_url": "https://github.com/Query-farm/vgi-google/blob/main/README.md",
+    },
     schemas=[
         Schema(
             name="main",
             comment="Query Google APIs from SQL: Sheets / Drive / Calendar / YouTube + a generic hatch",
+            tags={
+                "vgi.description_llm": _SCHEMA_DESCRIPTION_LLM,
+                "vgi.description_md": _SCHEMA_DESCRIPTION_MD,
+            },
             functions=list(TABLE_FUNCTIONS),
         ),
     ],
