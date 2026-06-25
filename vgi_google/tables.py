@@ -202,7 +202,18 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
                 "- The API may omit empty trailing cells, so rows can vary in width."
             ),
             keywords=(
-                "google sheets, spreadsheet, sheet, range, A1, cells, values, tabular, rows, header, read sheet, gsheet"
+                "google sheets",
+                "spreadsheet",
+                "sheet",
+                "range",
+                "A1",
+                "cells",
+                "values",
+                "tabular",
+                "rows",
+                "header",
+                "read sheet",
+                "gsheet",
             ),
             relative_path="vgi_google/tables.py",
             result_columns_md=(
@@ -299,8 +310,16 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
                 "- Requires a `google_service_account` secret; the worker is READ-only."
             ),
             keywords=(
-                "google drive, files, file search, drive query, mime type, folders, "
-                "documents, metadata, shared drive, list files"
+                "google drive",
+                "files",
+                "file search",
+                "drive query",
+                "mime type",
+                "folders",
+                "documents",
+                "metadata",
+                "shared drive",
+                "list files",
             ),
             relative_path="vgi_google/tables.py",
             result_columns_md=(
@@ -408,8 +427,16 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
                 "- Requires a `google_service_account` secret; the worker is READ-only."
             ),
             keywords=(
-                "google calendar, events, schedule, meetings, appointments, calendar "
-                "events, time range, recurring, agenda, ical"
+                "google calendar",
+                "events",
+                "schedule",
+                "meetings",
+                "appointments",
+                "calendar events",
+                "time range",
+                "recurring",
+                "agenda",
+                "ical",
             ),
             relative_path="vgi_google/tables.py",
             result_columns_md=(
@@ -511,8 +538,16 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
                 "- View/like/comment counts are NULL when a creator hides them."
             ),
             keywords=(
-                "youtube, video search, videos, views, likes, comments, channel, "
-                "engagement, statistics, youtube data api"
+                "youtube",
+                "video search",
+                "videos",
+                "views",
+                "likes",
+                "comments",
+                "channel",
+                "engagement",
+                "statistics",
+                "youtube data api",
             ),
             relative_path="vgi_google/tables.py",
             result_columns_md=(
@@ -625,7 +660,18 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
                 "- Use `google_apis()` / `google_methods()` to discover api/version/"
                 "method, and the `json` extension to read the `result` column."
             ),
-            keywords=("google api, generic, escape hatch, rest api, json, gmail, call method, discovery, any api, raw"),
+            keywords=(
+                "google api",
+                "generic",
+                "escape hatch",
+                "rest api",
+                "json",
+                "gmail",
+                "call method",
+                "discovery",
+                "any api",
+                "raw",
+            ),
             relative_path="vgi_google/tables.py",
             result_columns_md=(
                 "| column | type | description |\n"
@@ -784,8 +830,15 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
                 "- `name` is an optional case-insensitive substring filter."
             ),
             keywords=(
-                "google apis, discovery, api directory, list apis, available apis, "
-                "reachable, services, metadata, introspection"
+                "google apis",
+                "discovery",
+                "api directory",
+                "list apis",
+                "available apis",
+                "reachable",
+                "services",
+                "metadata",
+                "introspection",
             ),
             relative_path="vgi_google/tables.py",
             result_columns_md=(
@@ -895,8 +948,15 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
                 "receive in `params_json`."
             ),
             keywords=(
-                "google api methods, discovery, methods, endpoints, api surface, "
-                "parameters, dotted path, introspection, google_call"
+                "google api methods",
+                "discovery",
+                "methods",
+                "endpoints",
+                "api surface",
+                "parameters",
+                "dotted path",
+                "introspection",
+                "google_call",
             ),
             relative_path="vgi_google/tables.py",
             result_columns_md=(

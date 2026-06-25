@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http]>=0.8.4",
+#     "vgi-python[http]>=0.8.5",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
 # ]
@@ -35,6 +35,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import os
 
 from vgi import Worker
@@ -100,8 +101,20 @@ _GOOGLE_CATALOG = Catalog(
     source_url="https://github.com/Query-farm/vgi-google",
     tags={
         "vgi.title": "Google APIs for SQL",
-        "vgi.keywords": (
-            "google, google apis, sheets, drive, calendar, youtube, gmail, discovery, rest api, egress, connector"
+        "vgi.keywords": json.dumps(
+            [
+                "google",
+                "google apis",
+                "sheets",
+                "drive",
+                "calendar",
+                "youtube",
+                "gmail",
+                "discovery",
+                "rest api",
+                "egress",
+                "connector",
+            ]
         ),
         "vgi.doc_llm": _CATALOG_DESCRIPTION_LLM,
         "vgi.doc_md": _CATALOG_DESCRIPTION_MD,
@@ -117,11 +130,20 @@ _GOOGLE_CATALOG = Catalog(
             comment="Query Google APIs from SQL: Sheets / Drive / Calendar / YouTube + a generic hatch",
             tags={
                 "vgi.title": "Google API Table Functions",
-                "vgi.keywords": (
-                    "google, sheets, drive, calendar, youtube, google_call, "
-                    "google_apis, google_methods, discovery, rest api"
+                "vgi.keywords": json.dumps(
+                    [
+                        "google",
+                        "sheets",
+                        "drive",
+                        "calendar",
+                        "youtube",
+                        "google_call",
+                        "google_apis",
+                        "google_methods",
+                        "discovery",
+                        "rest api",
+                    ]
                 ),
-                "vgi.source_url": ("https://github.com/Query-farm/vgi-google/blob/main/google_worker.py"),
                 "vgi.doc_llm": _SCHEMA_DESCRIPTION_LLM,
                 "vgi.doc_md": _SCHEMA_DESCRIPTION_MD,
                 # VGI123 classifying tags use BARE keys (not vgi.-namespaced).
