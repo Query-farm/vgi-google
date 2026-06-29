@@ -74,6 +74,7 @@ _CATALOG_DESCRIPTION_LLM = (
 
 _CATALOG_DESCRIPTION_MD = (
     "# Google APIs for SQL\n\n"
+    "![Google logo](https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/250px-Google_2015_logo.svg.png)\n\n"
     "**Query the entire Google REST API surface directly from DuckDB SQL** — read Google "
     "Sheets ranges, list Google Drive files, pull Google Calendar events, search YouTube "
     "videos, and reach any other Google API as ordinary SQL table functions, no glue code "
