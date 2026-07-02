@@ -42,6 +42,7 @@ def object_tags(
     doc_md: str,
     keywords: Sequence[str],
     relative_path: str,
+    category: str,
     result_columns_md: str | None = None,
     executable_examples: str | None = None,
 ) -> dict[str, str]:
@@ -56,6 +57,9 @@ def object_tags(
         relative_path: Implementing file, relative to the repo root. Retained for
             readability/traceability; not emitted as a per-object source_url
             (VGI139 keeps source_url on the catalog only).
+        category: The ``vgi.category`` this object belongs to (VGI413). It MUST
+            name one of the categories declared in the schema's
+            ``vgi.categories`` registry.
         result_columns_md: Optional Markdown table of returned columns
             (``vgi.result_columns_md``), for table functions.
         executable_examples: Optional JSON string of guaranteed-runnable examples
@@ -70,6 +74,7 @@ def object_tags(
         "vgi.doc_llm": doc_llm,
         "vgi.doc_md": doc_md,
         "vgi.keywords": keywords_json(keywords),
+        "vgi.category": category,
     }
     if result_columns_md is not None:
         tags["vgi.result_columns_md"] = result_columns_md

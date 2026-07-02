@@ -170,6 +170,7 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
         ]
         tags = object_tags(
             title="Read Google Sheets Range",
+            category="Curated data adapters",
             doc_llm=(
                 "## google_sheet\n\n"
                 "Read a rectangular range from a Google Sheet as SQL rows. Pass the "
@@ -277,6 +278,7 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
         ]
         tags = object_tags(
             title="List and Search Google Drive Files",
+            category="Curated data adapters",
             doc_llm=(
                 "## google_drive\n\n"
                 "List or search Google Drive files and return their metadata as SQL "
@@ -394,6 +396,7 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
         ]
         tags = object_tags(
             title="List Google Calendar Events",
+            category="Curated data adapters",
             doc_llm=(
                 "## google_calendar\n\n"
                 "List events from a Google Calendar as SQL rows. Defaults to the "
@@ -507,6 +510,7 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
         ]
         tags = object_tags(
             title="Search YouTube Videos",
+            category="Curated data adapters",
             doc_llm=(
                 "## google_youtube\n\n"
                 "Search YouTube for videos matching a query and return each hit with "
@@ -626,6 +630,7 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
         ]
         tags = object_tags(
             title="Call Any Google API Method",
+            category="Generic API access",
             doc_llm=(
                 "## google_call\n\n"
                 "The generic escape hatch: invoke **any** Google REST API method "
@@ -800,6 +805,7 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
         ]
         tags = object_tags(
             title="Discover Reachable Google APIs",
+            category="API discovery",
             doc_llm=(
                 "## google_apis\n\n"
                 "List the Google APIs reachable through the public **Discovery "
@@ -918,6 +924,7 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
         ]
         tags = object_tags(
             title="List Google API Methods",
+            category="API discovery",
             doc_llm=(
                 "## google_methods\n\n"
                 "List the callable methods of a single Google API, one row per method, "

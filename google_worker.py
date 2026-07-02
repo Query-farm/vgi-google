@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http]>=0.8.5",
+#     "vgi-python[http]>=0.9.0",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
 # ]
@@ -91,19 +91,20 @@ _CATALOG_DESCRIPTION_MD = (
     "for the full API catalog and auth model.\n\n"
     "It is built for data engineers and analysts who want spreadsheet data, file metadata, "
     "calendar schedules, and video statistics in their warehouse without standing up a separate "
-    "ETL service. The curated table functions are `google_sheet` (read a Sheets A1 range as "
-    "rows), `google_drive` (list and search Drive files), `google_calendar` (list Calendar "
-    "events), and `google_youtube` (search videos with view/like/comment counts). For any other "
-    "Google REST method, `google_call` invokes it by name and returns the JSON response as rows, "
-    "while `google_apis` and `google_methods` let you introspect which APIs and methods are "
-    "available — discovery from inside SQL.\n\n"
-    "Typical use cases: `SELECT * FROM google.google_sheet('1AbC...', 'Sheet1!A1:Z', header := "
-    "true)` to load a spreadsheet, `SELECT * FROM google.google_drive(query := \"mimeType='application/pdf'\")` "
-    "to inventory Drive, joining `google_calendar` events against internal tables, or ranking "
-    "`google_youtube` results by `view_count`. Pagination (Google's `nextPageToken`) is handled "
-    "automatically and a `count` argument caps total rows. The connector is **READ-only**; data, "
-    "quotas, billing and compliance with Google's Terms of Service remain the responsibility of "
-    "the operator whose credentials are used."
+    "ETL service. Three kinds of access work together: **curated data adapters** provide typed "
+    "columns for the high-demand surfaces (Sheets, Drive, Calendar, YouTube), **generic API "
+    "access** reaches any other Google REST method by name and returns its JSON response as rows, "
+    "and **API discovery** lets you introspect which APIs and methods are reachable — all from "
+    "inside SQL. List the schema to see the exact table functions and their arguments.\n\n"
+    "A typical query loads a spreadsheet range straight into SQL:\n\n"
+    "```sql\n"
+    "SELECT *\n"
+    "FROM google.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);\n"
+    "```\n\n"
+    "Pagination (Google's `nextPageToken`) is handled automatically and a `count` argument caps "
+    "total rows. The connector is **READ-only**; data, quotas, billing and compliance with "
+    "Google's Terms of Service remain the responsibility of the operator whose credentials are "
+    "used."
 )
 
 _SCHEMA_DESCRIPTION_LLM = (
@@ -114,8 +115,18 @@ _SCHEMA_DESCRIPTION_LLM = (
 )
 
 _SCHEMA_DESCRIPTION_MD = (
-    "Google API table functions over the Discovery Service: curated Sheets/Drive/Calendar/YouTube "
-    "READ adapters, a generic `google_call` hatch, and `google_apis` / `google_methods` discovery."
+    "## Google API table functions\n\n"
+    "The `main` schema exposes Google's REST surface as SQL table functions, grouped into three "
+    "kinds of access.\n\n"
+    "- **Curated data adapters** give first-class, typed columns for the high-demand surfaces — "
+    "Sheets ranges, Drive file metadata, Calendar events, and YouTube video statistics.\n"
+    "- **Generic API access** reaches any other Google REST method by name and returns its JSON "
+    "response as rows, so the breadth is not limited to the curated few.\n"
+    "- **API discovery** lists which APIs and methods are reachable through Google's public "
+    "Discovery Service, so you can find the right method and parameters before you call it.\n\n"
+    "Authentication is service-account-first (an API key suffices for public data), resolved "
+    "through the VGI secret provider — credentials are never inlined in SQL. Pagination is handled "
+    "automatically and a `count` argument caps total rows. Every function is READ-only."
 )
 
 _GOOGLE_CATALOG = Catalog(
@@ -147,6 +158,78 @@ _GOOGLE_CATALOG = Catalog(
         "vgi.license": "MIT",
         "vgi.support_contact": "https://github.com/Query-farm/vgi-google/issues",
         "vgi.support_policy_url": "https://github.com/Query-farm/vgi-google/blob/main/README.md",
+        # VGI152 analyst task suite for `vgi-lint simulate` / the agent-check.
+        # Tasks bias toward the public Discovery Service functions (no
+        # credentials); the curated-adapter tasks show the expected shape even
+        # though executing them needs a configured Google secret.
+        "vgi.agent_test_tasks": json.dumps(
+            [
+                {
+                    # These tasks exercise the credential-free Discovery surface
+                    # (the worker's distinguishing breadth): finding the right
+                    # API/version/method to call. They resolve against Google's
+                    # public API directory, so they run and are reference-graded
+                    # without any configured secret. Each prompt pins the exact
+                    # columns and filter so the analyst's SQL reproduces the
+                    # reference result. Invoking the curated adapters or
+                    # google_call additionally needs a Google credential — see the
+                    # README and the per-function docs.
+                    "name": "discover_sheets_api",
+                    "prompt": (
+                        "Using the google_apis discovery function, find the reachable Google API "
+                        "whose name is exactly 'sheets'. Return only its name, version and title "
+                        "columns."
+                    ),
+                    "reference_sql": (
+                        "SELECT name, version, title FROM google.main.google_apis() WHERE name = 'sheets';"
+                    ),
+                },
+                {
+                    "name": "sheets_preferred_version",
+                    "prompt": (
+                        "Using the google_apis discovery function, what is the preferred version of "
+                        "the Google API whose name is exactly 'sheets'? Return only the version "
+                        "column for the row where name = 'sheets' and preferred is true."
+                    ),
+                    "reference_sql": (
+                        "SELECT version FROM google.main.google_apis() WHERE name = 'sheets' AND preferred;"
+                    ),
+                },
+                {
+                    "name": "drive_files_list_verb",
+                    "prompt": (
+                        "Using the google_methods discovery function for the api 'drive' version "
+                        "'v3', return the method and http_method columns for the method whose "
+                        "dotted name is exactly 'files.list'."
+                    ),
+                    "reference_sql": (
+                        "SELECT method, http_method FROM google.main.google_methods('drive', 'v3') "
+                        "WHERE method = 'files.list';"
+                    ),
+                },
+                {
+                    "name": "calendar_api_reachable",
+                    "prompt": (
+                        "Using the google_apis discovery function, confirm the Google Calendar API "
+                        "is reachable. Return only the name and version columns for the API whose "
+                        "name is exactly 'calendar'."
+                    ),
+                    "reference_sql": ("SELECT name, version FROM google.main.google_apis() WHERE name = 'calendar';"),
+                },
+                {
+                    "name": "sheets_values_get_verb",
+                    "prompt": (
+                        "Using the google_methods discovery function for the api 'sheets' version "
+                        "'v4', return only the http_method column for the method whose dotted name "
+                        "is exactly 'spreadsheets.values.get'."
+                    ),
+                    "reference_sql": (
+                        "SELECT http_method FROM google.main.google_methods('sheets', 'v4') "
+                        "WHERE method = 'spreadsheets.values.get';"
+                    ),
+                },
+            ]
+        ),
     },
     schemas=[
         Schema(
@@ -170,6 +253,36 @@ _GOOGLE_CATALOG = Catalog(
                 ),
                 "vgi.doc_llm": _SCHEMA_DESCRIPTION_LLM,
                 "vgi.doc_md": _SCHEMA_DESCRIPTION_MD,
+                # VGI413 category registry: each function declares a `vgi.category`
+                # naming one of these; categories drive navigation/listing sections.
+                "vgi.categories": json.dumps(
+                    [
+                        {
+                            "name": "Curated data adapters",
+                            "description": (
+                                "Typed READ adapters for the high-demand Google surfaces — "
+                                "Sheets ranges, Drive file metadata, Calendar events, and "
+                                "YouTube video statistics — with first-class columns."
+                            ),
+                        },
+                        {
+                            "name": "Generic API access",
+                            "description": (
+                                "An escape hatch that invokes any Google REST API method by "
+                                "name and returns its JSON response as rows, covering services "
+                                "beyond the curated adapters."
+                            ),
+                        },
+                        {
+                            "name": "API discovery",
+                            "description": (
+                                "Introspection over Google's public Discovery Service: list "
+                                "reachable APIs and the callable methods/parameters of each, so "
+                                "you can find what to call before calling it."
+                            ),
+                        },
+                    ]
+                ),
                 # VGI123 classifying tags use BARE keys (not vgi.-namespaced).
                 "domain": "productivity",
                 "category": "api-integration",
