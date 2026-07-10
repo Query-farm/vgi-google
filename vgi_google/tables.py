@@ -164,8 +164,12 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
         categories = ["google", "sheets", "spreadsheet"]
         examples = [
             FunctionExample(
-                sql="SELECT * FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true)",
-                description="Read a sheet range with the first row as headers",
+                sql=(
+                    "SELECT row_number, record ->> '$.name' AS name "
+                    "FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true) "
+                    "WHERE row_number <= 100 ORDER BY row_number"
+                ),
+                description="Read the first 100 data rows of a header sheet, projecting the 'name' column",
             ),
         ]
         tags = object_tags(
@@ -190,14 +194,13 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
             ),
             doc_md=(
                 "# google_sheet\n\n"
-                "Reads a Google Sheets A1 range into rows.\n\n"
-                "## Usage\n\n"
-                "```sql\n"
-                "SELECT * FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);\n"
-                "```\n\n"
+                "Reads a Google Sheets A1 range into rows. Pass the spreadsheet ID (the "
+                "long token in the sheet URL) and an A1 range such as `Sheet1!A1:Z`; the "
+                "attached example queries show the exact call shape.\n\n"
                 "## Notes\n\n"
-                "- `header := true` names columns from the first row and fills the JSON "
-                "`record` column; otherwise `record` is NULL and cells live in `values`.\n"
+                "- With the `header` argument true, columns are named from the first row "
+                "and surfaced in the JSON `record` column; otherwise `record` is NULL and "
+                "cells live in the `values` array.\n"
                 "- Requires a `google_service_account` secret (or `google_api_key` for a "
                 "publicly shared sheet); the worker is READ-only.\n"
                 "- The API may omit empty trailing cells, so rows can vary in width."
@@ -217,13 +220,22 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
                 "gsheet",
             ),
             relative_path="vgi_google/tables.py",
-            result_columns_md=(
-                "| column | type | description |\n"
-                "|---|---|---|\n"
-                "| `row_number` | BIGINT | 1-based row index within the range (after any header row). |\n"
-                "| `values` | VARCHAR[] | The row's cells as text. |\n"
-                "| `record` | JSON | When `header := true`, a JSON object of header->cell for this row; else NULL. |"
-            ),
+            result_columns=[
+                {
+                    "name": "row_number",
+                    "type": "BIGINT",
+                    "description": "1-based row index within the range (after any header row).",
+                },
+                {"name": "values", "type": "VARCHAR[]", "description": "The row's cells as text."},
+                {
+                    "name": "record",
+                    "type": "VARCHAR",
+                    "description": (
+                        "With the header argument true, a JSON-encoded object of header to cell for this row "
+                        "(read with the json extension's ->> operator); else NULL."
+                    ),
+                },
+            ],
         )
 
     @classmethod
@@ -298,15 +310,11 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
             ),
             doc_md=(
                 "# google_drive\n\n"
-                "Lists and searches Google Drive file metadata.\n\n"
-                "## Usage\n\n"
-                "```sql\n"
-                "SELECT id, name FROM google.main.google_drive(\n"
-                "  query := \"mimeType='application/pdf'\", count := 100);\n"
-                "```\n\n"
+                "Lists and searches Google Drive file metadata. The attached example "
+                "queries show how to filter by MIME type and cap the result count.\n\n"
                 "## Notes\n\n"
-                "- `query` is Drive's `q` syntax; `order_by` takes keys like "
-                "`modifiedTime desc`.\n"
+                "- The `query` argument is Drive's native `q` syntax; `order_by` takes "
+                "keys like `modifiedTime desc`.\n"
                 "- Returns metadata only (no file bytes); use `drive_id` for Shared "
                 "Drives.\n"
                 "- Requires a `google_service_account` secret; the worker is READ-only."
@@ -324,22 +332,32 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
                 "list files",
             ),
             relative_path="vgi_google/tables.py",
-            result_columns_md=(
-                "| column | type | description |\n"
-                "|---|---|---|\n"
-                "| `id` | VARCHAR | Drive file ID. |\n"
-                "| `name` | VARCHAR | File name. |\n"
-                "| `mime_type` | VARCHAR | MIME type (e.g. `application/pdf`). |\n"
-                "| `modified_time` | TIMESTAMPTZ | Last modification time. |\n"
-                "| `created_time` | TIMESTAMPTZ | Creation time. |\n"
-                "| `size` | BIGINT | Size in bytes, when the file has a binary content size. |\n"
-                "| `web_view_link` | VARCHAR | A link to open the file in a browser. |\n"
-                "| `icon_link` | VARCHAR | A link to the file's icon. |\n"
-                "| `parents` | VARCHAR[] | Parent folder IDs. |\n"
-                "| `owner` | VARCHAR | Primary owner display name, when available. |\n"
-                "| `trashed` | BOOLEAN | Whether the file is in the trash. |\n"
-                "| `starred` | BOOLEAN | Whether the file is starred. |"
-            ),
+            result_columns=[
+                {"name": "id", "type": "VARCHAR", "description": "Drive file ID."},
+                {"name": "name", "type": "VARCHAR", "description": "File name."},
+                {"name": "mime_type", "type": "VARCHAR", "description": "MIME type (e.g. application/pdf)."},
+                {"name": "modified_time", "type": "TIMESTAMPTZ", "description": "Last modification time."},
+                {"name": "created_time", "type": "TIMESTAMPTZ", "description": "Creation time."},
+                {
+                    "name": "size",
+                    "type": "BIGINT",
+                    "description": "Size in bytes, when the file has a binary content size.",
+                },
+                {"name": "web_view_link", "type": "VARCHAR", "description": "A link to open the file in a browser."},
+                {"name": "icon_link", "type": "VARCHAR", "description": "A link to the file's icon."},
+                {"name": "parents", "type": "VARCHAR[]", "description": "Parent folder IDs."},
+                {"name": "owner", "type": "VARCHAR", "description": "Primary owner display name, when available."},
+                {"name": "trashed", "type": "BOOLEAN", "description": "Whether the file is in the trash."},
+                {"name": "starred", "type": "BOOLEAN", "description": "Whether the file is starred."},
+                {
+                    "name": "extra",
+                    "type": "VARCHAR",
+                    "description": (
+                        "JSON-encoded object of any additional file fields returned by the Drive API "
+                        "beyond the typed columns (read with the json extension's ->> operator)."
+                    ),
+                },
+            ],
         )
 
     @classmethod
@@ -416,15 +434,11 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
             ),
             doc_md=(
                 "# google_calendar\n\n"
-                "Lists Google Calendar events.\n\n"
-                "## Usage\n\n"
-                "```sql\n"
-                "SELECT id, summary, start_time\n"
-                "FROM google.main.google_calendar(calendar_id := 'primary', count := 50);\n"
-                "```\n\n"
+                "Lists Google Calendar events. The attached example queries show how to "
+                "bound the time window and page through a calendar.\n\n"
                 "## Notes\n\n"
-                "- `single_events := true` (default) expands recurring events into "
-                "instances.\n"
+                "- The `single_events` argument (true by default) expands recurring "
+                "events into individual instances.\n"
                 "- All-day events report `all_day = true` with NULL start/end "
                 "timestamps.\n"
                 "- Requires a `google_service_account` secret; the worker is READ-only."
@@ -442,21 +456,43 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
                 "ical",
             ),
             relative_path="vgi_google/tables.py",
-            result_columns_md=(
-                "| column | type | description |\n"
-                "|---|---|---|\n"
-                "| `id` | VARCHAR | Event ID. |\n"
-                "| `summary` | VARCHAR | Event title/summary. |\n"
-                "| `description` | VARCHAR | Event description / notes. |\n"
-                "| `location` | VARCHAR | Free-text event location. |\n"
-                "| `status` | VARCHAR | Event status (`confirmed`, `tentative`, `cancelled`). |\n"
-                "| `start_time` | TIMESTAMPTZ | Start as a UTC timestamp; NULL for all-day events. |\n"
-                "| `end_time` | TIMESTAMPTZ | End as a UTC timestamp; NULL for all-day events. |\n"
-                "| `all_day` | BOOLEAN | True when the event is an all-day (date-only) event. |\n"
-                "| `organizer` | VARCHAR | Organizer e-mail, when present. |\n"
-                "| `creator` | VARCHAR | Creator e-mail, when present. |\n"
-                "| `html_link` | VARCHAR | A link to the event in the Calendar UI. |"
-            ),
+            result_columns=[
+                {"name": "id", "type": "VARCHAR", "description": "Event ID."},
+                {"name": "summary", "type": "VARCHAR", "description": "Event title/summary."},
+                {"name": "description", "type": "VARCHAR", "description": "Event description / notes."},
+                {"name": "location", "type": "VARCHAR", "description": "Free-text event location."},
+                {
+                    "name": "status",
+                    "type": "VARCHAR",
+                    "description": "Event status (confirmed, tentative, or cancelled).",
+                },
+                {
+                    "name": "start_time",
+                    "type": "TIMESTAMPTZ",
+                    "description": "Start as a UTC timestamp; NULL for all-day events.",
+                },
+                {
+                    "name": "end_time",
+                    "type": "TIMESTAMPTZ",
+                    "description": "End as a UTC timestamp; NULL for all-day events.",
+                },
+                {
+                    "name": "all_day",
+                    "type": "BOOLEAN",
+                    "description": "True when the event is an all-day (date-only) event.",
+                },
+                {"name": "organizer", "type": "VARCHAR", "description": "Organizer e-mail, when present."},
+                {"name": "creator", "type": "VARCHAR", "description": "Creator e-mail, when present."},
+                {"name": "html_link", "type": "VARCHAR", "description": "A link to the event in the Calendar UI."},
+                {
+                    "name": "extra",
+                    "type": "VARCHAR",
+                    "description": (
+                        "JSON-encoded object of any additional event fields returned by the Calendar API "
+                        "beyond the typed columns (read with the json extension's ->> operator)."
+                    ),
+                },
+            ],
         )
 
     @classmethod
@@ -485,7 +521,7 @@ class _YouTubeArgs:
     query: Annotated[str, Arg(0, doc="Search query.")]
     count: Annotated[int, Arg("count", default=25, doc="Maximum videos to return.", ge=1, le=1_000_000)]
     page_size: Annotated[int, Arg("page_size", default=0, doc="Videos per request (0 = automatic).", ge=0, le=50)]
-    order: Annotated[str, Arg("order", default="", doc="Result order: relevance/date/viewCount/rating.")]
+    order_by: Annotated[str, Arg("order_by", default="", doc="Result order: relevance/date/viewCount/rating.")]
 
 
 @init_single_worker
@@ -515,7 +551,7 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
                 "## google_youtube\n\n"
                 "Search YouTube for videos matching a query and return each hit with "
                 "its engagement statistics as SQL rows. The first positional argument "
-                "is the **search query**; `order` controls ranking "
+                "is the **search query**; `order_by` controls ranking "
                 "(`relevance`, `date`, `viewCount`, `rating`) and `count` caps the "
                 "results. Each row carries the video's title, channel, publish time, "
                 "duration, and view/like/comment counts.\n\n"
@@ -523,21 +559,17 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
                 "or rank content by views/likes. Auth is by **API key** "
                 "(`google_api_key`) via the VGI secret provider — YouTube Data API is "
                 "public. Statistics columns can be NULL when a video hides them.\n\n"
-                "**Inputs:** `query`, `count`, `page_size`, `order`. **Outputs:** "
+                "**Inputs:** `query`, `count`, `page_size`, `order_by`. **Outputs:** "
                 "video_id, title, description, channel, published_at, view/like/comment "
                 "counts, duration, and the watch URL."
             ),
             doc_md=(
                 "# google_youtube\n\n"
-                "Searches YouTube videos with engagement statistics.\n\n"
-                "## Usage\n\n"
-                "```sql\n"
-                "SELECT video_id, title, view_count\n"
-                "FROM google.main.google_youtube('duckdb', count := 25);\n"
-                "```\n\n"
+                "Searches YouTube videos with engagement statistics. The attached example "
+                "queries show how to rank hits by view count.\n\n"
                 "## Notes\n\n"
-                "- `order` accepts `relevance` (default), `date`, `viewCount`, or "
-                "`rating`.\n"
+                "- The `order_by` argument accepts `relevance` (default), `date`, "
+                "`viewCount`, or `rating`.\n"
                 "- Requires a `google_api_key` secret (YouTube Data API v3).\n"
                 "- View/like/comment counts are NULL when a creator hides them."
             ),
@@ -554,21 +586,35 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
                 "youtube data api",
             ),
             relative_path="vgi_google/tables.py",
-            result_columns_md=(
-                "| column | type | description |\n"
-                "|---|---|---|\n"
-                "| `video_id` | VARCHAR | YouTube video ID. |\n"
-                "| `title` | VARCHAR | Video title. |\n"
-                "| `description` | VARCHAR | Video description snippet. |\n"
-                "| `channel_title` | VARCHAR | Channel display name. |\n"
-                "| `channel_id` | VARCHAR | Channel ID. |\n"
-                "| `published_at` | TIMESTAMPTZ | Publication time. |\n"
-                "| `view_count` | BIGINT | View count, when statistics are available. |\n"
-                "| `like_count` | BIGINT | Like count, when statistics are available. |\n"
-                "| `comment_count` | BIGINT | Comment count, when statistics are available. |\n"
-                "| `duration` | VARCHAR | ISO-8601 duration (e.g. `PT4M13S`), when available. |\n"
-                "| `url` | VARCHAR | Canonical watch URL. |"
-            ),
+            result_columns=[
+                {"name": "video_id", "type": "VARCHAR", "description": "YouTube video ID."},
+                {"name": "title", "type": "VARCHAR", "description": "Video title."},
+                {"name": "description", "type": "VARCHAR", "description": "Video description snippet."},
+                {"name": "channel_title", "type": "VARCHAR", "description": "Channel display name."},
+                {"name": "channel_id", "type": "VARCHAR", "description": "Channel ID."},
+                {"name": "published_at", "type": "TIMESTAMPTZ", "description": "Publication time."},
+                {"name": "view_count", "type": "BIGINT", "description": "View count, when statistics are available."},
+                {"name": "like_count", "type": "BIGINT", "description": "Like count, when statistics are available."},
+                {
+                    "name": "comment_count",
+                    "type": "BIGINT",
+                    "description": "Comment count, when statistics are available.",
+                },
+                {
+                    "name": "duration",
+                    "type": "VARCHAR",
+                    "description": "ISO-8601 duration (e.g. PT4M13S), when available.",
+                },
+                {"name": "url", "type": "VARCHAR", "description": "Canonical watch URL."},
+                {
+                    "name": "extra",
+                    "type": "VARCHAR",
+                    "description": (
+                        "JSON-encoded object of any additional video fields returned by the YouTube API "
+                        "beyond the typed columns (read with the json extension's ->> operator)."
+                    ),
+                },
+            ],
         )
 
     @classmethod
@@ -624,8 +670,12 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
         categories = ["google", "generic", "json"]
         examples = [
             FunctionExample(
-                sql="SELECT * FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}')",
-                description="List Gmail labels via the generic hatch",
+                sql=(
+                    "SELECT result ->> '$.name' AS label "
+                    "FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}') "
+                    "WHERE result ->> '$.type' = 'user' ORDER BY label"
+                ),
+                description="List the user-created Gmail label names via the generic hatch",
             ),
         ]
         tags = object_tags(
@@ -652,12 +702,8 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
             ),
             doc_md=(
                 "# google_call\n\n"
-                "Calls any Google API method and returns JSON rows.\n\n"
-                "## Usage\n\n"
-                "```sql\n"
-                "SELECT * FROM google.main.google_call(\n"
-                "  'gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}');\n"
-                "```\n\n"
+                "Calls any Google API method and returns JSON rows. The attached example "
+                "queries show how to project fields out of the JSON `result` column.\n\n"
                 "## Notes\n\n"
                 "- A single list field in the response is expanded to one row per "
                 "element; otherwise the whole response is one row.\n"
@@ -678,12 +724,17 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
                 "raw",
             ),
             relative_path="vgi_google/tables.py",
-            result_columns_md=(
-                "| column | type | description |\n"
-                "|---|---|---|\n"
-                "| `result` | JSON | One result object as JSON. If the response has a single list field "
-                "(e.g. `files`, `items`, `messages`), each element is a row; otherwise the whole response is one row. |"
-            ),
+            result_columns=[
+                {
+                    "name": "result",
+                    "type": "VARCHAR",
+                    "description": (
+                        "One result object as a JSON-encoded string (read with the json extension's ->> operator). "
+                        "If the response has a single list field "
+                        "(e.g. files, items, messages), each element is a row; otherwise the whole response is one row."
+                    ),
+                },
+            ],
         )
 
     @classmethod
@@ -823,17 +874,13 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
             ),
             doc_md=(
                 "# google_apis\n\n"
-                "Lists Google APIs reachable via the Discovery Service.\n\n"
-                "## Usage\n\n"
-                "```sql\n"
-                "SELECT name, version, title\n"
-                "FROM google.main.google_apis() WHERE name LIKE '%sheets%';\n"
-                "```\n\n"
+                "Lists Google APIs reachable via the Discovery Service. The attached "
+                "example queries show how to narrow the directory to a single service.\n\n"
                 "## Notes\n\n"
                 "- Reads Google's public API directory; no credentials needed.\n"
                 "- Pair with `google_methods(api, version)` and `google_call` to invoke "
                 "any listed API.\n"
-                "- `name` is an optional case-insensitive substring filter."
+                "- The `name` argument is an optional case-insensitive substring filter."
             ),
             keywords=(
                 "google apis",
@@ -847,15 +894,21 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
                 "introspection",
             ),
             relative_path="vgi_google/tables.py",
-            result_columns_md=(
-                "| column | type | description |\n"
-                "|---|---|---|\n"
-                "| `name` | VARCHAR | API name to pass as the first google_call argument. |\n"
-                "| `version` | VARCHAR | API version. |\n"
-                "| `title` | VARCHAR | Human-readable API title. |\n"
-                "| `preferred` | BOOLEAN | Whether this is the preferred version of the API. |\n"
-                "| `discovery_url` | VARCHAR | URL of the API's discovery document. |"
-            ),
+            result_columns=[
+                {
+                    "name": "name",
+                    "type": "VARCHAR",
+                    "description": "API name to pass as the first google_call argument.",
+                },
+                {"name": "version", "type": "VARCHAR", "description": "API version."},
+                {"name": "title", "type": "VARCHAR", "description": "Human-readable API title."},
+                {
+                    "name": "preferred",
+                    "type": "BOOLEAN",
+                    "description": "Whether this is the preferred version of the API.",
+                },
+                {"name": "discovery_url", "type": "VARCHAR", "description": "URL of the API's discovery document."},
+            ],
             executable_examples=DISCOVERY_EXECUTABLE_EXAMPLES,
         )
 
@@ -942,12 +995,8 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
             ),
             doc_md=(
                 "# google_methods\n\n"
-                "Lists the callable methods of one Google API.\n\n"
-                "## Usage\n\n"
-                "```sql\n"
-                "SELECT method, http_method\n"
-                "FROM google.main.google_methods('drive', 'v3');\n"
-                "```\n\n"
+                "Lists the callable methods of one Google API. The attached example "
+                "queries show how to browse a service's method surface.\n\n"
                 "## Notes\n\n"
                 "- Reads the API's public discovery document; no credentials needed.\n"
                 "- The `method` column is the dotted path to pass to `google_call`.\n"
@@ -966,16 +1015,14 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
                 "google_call",
             ),
             relative_path="vgi_google/tables.py",
-            result_columns_md=(
-                "| column | type | description |\n"
-                "|---|---|---|\n"
-                "| `method` | VARCHAR | Dotted method path to pass to google_call. |\n"
-                "| `http_method` | VARCHAR | HTTP verb (GET/POST/...). |\n"
-                "| `path` | VARCHAR | URL path template. |\n"
-                "| `description` | VARCHAR | Method description. |\n"
-                "| `parameters` | VARCHAR[] | Parameter names. |\n"
-                "| `required_parameters` | VARCHAR[] | Required parameter names. |"
-            ),
+            result_columns=[
+                {"name": "method", "type": "VARCHAR", "description": "Dotted method path to pass to google_call."},
+                {"name": "http_method", "type": "VARCHAR", "description": "HTTP verb (GET/POST/...)."},
+                {"name": "path", "type": "VARCHAR", "description": "URL path template."},
+                {"name": "description", "type": "VARCHAR", "description": "Method description."},
+                {"name": "parameters", "type": "VARCHAR[]", "description": "Parameter names."},
+                {"name": "required_parameters", "type": "VARCHAR[]", "description": "Required parameter names."},
+            ],
         )
 
     @classmethod

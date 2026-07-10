@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http]>=0.9.0",
+#     "vgi-python[http]>=0.14.0",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
 # ]
@@ -39,9 +39,176 @@ import json
 import os
 
 from vgi import Worker
-from vgi.catalog import Catalog, Schema
+from vgi.catalog import Catalog, Schema, View
 
+from vgi_google.adapters import CalendarAdapter, DriveAdapter, SheetsAdapter, YouTubeAdapter
 from vgi_google.tables import TABLE_FUNCTIONS
+
+
+def _sql_str(value: str) -> str:
+    """Return a single-quoted SQL string literal with embedded quotes escaped."""
+    escaped = value.replace("'", "''")
+    return f"'{escaped}'"
+
+
+# The worker's own function registry, one row per table function. The four
+# curated adapters source their `api`/`version` straight from the adapter
+# classes, so this browsable view can never drift from runtime behaviour. It is
+# a genuine, credential-free relation (a literal VALUES scan) that satisfies
+# VGI146 and gives an agent something to SELECT before it has to guess a
+# function's arguments — including which functions need a Google secret.
+_FUNCTION_REGISTRY: tuple[tuple[str, str, str, str, bool, str], ...] = (
+    (
+        "google_sheet",
+        f"{SheetsAdapter.api}:{SheetsAdapter.version}",
+        "Curated data adapters",
+        "service account or API key",
+        True,
+        "Read a Google Sheets A1 range as rows (values or a JSON record per row).",
+    ),
+    (
+        "google_drive",
+        f"{DriveAdapter.api}:{DriveAdapter.version}",
+        "Curated data adapters",
+        "service account",
+        True,
+        "List or search Google Drive file metadata using Drive q query syntax.",
+    ),
+    (
+        "google_calendar",
+        f"{CalendarAdapter.api}:{CalendarAdapter.version}",
+        "Curated data adapters",
+        "service account",
+        True,
+        "List Google Calendar events within an optional time window.",
+    ),
+    (
+        "google_youtube",
+        f"{YouTubeAdapter.api}:{YouTubeAdapter.version}",
+        "Curated data adapters",
+        "API key",
+        True,
+        "Search YouTube videos with view, like and comment counts.",
+    ),
+    (
+        "google_call",
+        "any",
+        "Generic API access",
+        "service account or API key",
+        True,
+        "Invoke any Google REST API method by name and return its JSON response as rows.",
+    ),
+    (
+        "google_apis",
+        "discovery",
+        "API discovery",
+        "none",
+        False,
+        "List the Google APIs reachable through the public Discovery Service.",
+    ),
+    (
+        "google_methods",
+        "discovery",
+        "API discovery",
+        "none",
+        False,
+        "List the callable methods of one Google API from its discovery document.",
+    ),
+)
+
+
+def _function_registry_sql() -> str:
+    """Build a literal ``VALUES`` relation of the worker's function registry.
+
+    Sourced from :data:`_FUNCTION_REGISTRY` (whose curated rows read their
+    ``api``/``version`` from the adapter classes), so the browsable view and the
+    runtime function set stay in lockstep. Emitting literal rows keeps the view
+    credential-free: it resolves without auth, network, or a Google API call.
+    """
+    rows = ",\n        ".join(
+        "("
+        f"{_sql_str(name)}, {_sql_str(api)}, {_sql_str(category)}, "
+        f"{_sql_str(auth)}, {str(requires_secret).upper()}, {_sql_str(summary)}"
+        ")"
+        for name, api, category, auth, requires_secret, summary in _FUNCTION_REGISTRY
+    )
+    return (
+        "SELECT function_name, api, category, auth, requires_secret, summary FROM (VALUES\n"
+        f"        {rows}\n"
+        "    ) AS t(function_name, api, category, auth, requires_secret, summary)"
+    )
+
+
+_FUNCTIONS_VIEW = View(
+    name="google_functions",
+    definition=_function_registry_sql(),
+    comment="Browsable registry of every google table function: its API, category, auth, and summary.",
+    column_comments={
+        "function_name": "The table function name to call in the google.main schema.",
+        "api": "The Google API and version the function targets (or 'any'/'discovery').",
+        "category": "The function's category (Curated data adapters, Generic API access, or API discovery).",
+        "auth": "The credential the function needs: 'service account', 'API key', or 'none'.",
+        "requires_secret": "TRUE if a Google secret must be configured before the function returns rows.",
+        "summary": "One-line description of what the function returns.",
+    },
+    tags={
+        "vgi.title": "Google Function Registry (browsable table)",
+        "vgi.category": "API discovery",
+        # VGI123 classifying tags use BARE keys (not vgi.-namespaced).
+        "domain": "productivity",
+        "category": "api-integration",
+        "topic": "google-apis",
+        "vgi.doc_llm": (
+            "A ready-to-scan **registry table** of every table function this worker exposes, so an "
+            "agent can browse the surface (no parentheses, no arguments) before choosing a function "
+            "to call. Each row gives the `function_name` to call in `google.main`, the Google `api` "
+            "and version it targets, its `category`, the `auth` it needs, a `requires_secret` flag "
+            "that is TRUE for the functions that need a configured Google credential, and a one-line "
+            "`summary`. Filter `requires_secret = false` to find the two discovery functions "
+            "(google_apis, google_methods) that run with no credential at all. This view is a plain "
+            "literal relation: it resolves without auth, network, or any Google API call."
+        ),
+        "vgi.doc_md": (
+            "## google_functions (view)\n\n"
+            "A browsable registry of every table function in the `google` catalog: its target Google "
+            "API, category, the credential it needs, whether a secret is required, and a one-line "
+            "summary. Browse it directly to discover what the worker can do; the two rows with "
+            "`requires_secret = false` are the credential-free discovery functions. The attached "
+            "example queries show how to browse and filter the registry."
+        ),
+        "vgi.keywords": json.dumps(
+            [
+                "functions",
+                "registry",
+                "catalog",
+                "discovery",
+                "browsable",
+                "table functions",
+                "google",
+                "capabilities",
+                "auth",
+            ]
+        ),
+        "vgi.example_queries": json.dumps(
+            [
+                {
+                    "description": "Browse every google table function, its API, category and auth.",
+                    "sql": (
+                        "SELECT function_name, api, category, auth "
+                        "FROM google.main.google_functions ORDER BY function_name"
+                    ),
+                },
+                {
+                    "description": "Find the functions that run without any Google credential.",
+                    "sql": (
+                        "SELECT function_name, summary FROM google.main.google_functions "
+                        "WHERE requires_secret = false ORDER BY function_name"
+                    ),
+                },
+            ]
+        ),
+    },
+)
 
 
 def _maybe_install_mock() -> None:
@@ -96,11 +263,9 @@ _CATALOG_DESCRIPTION_MD = (
     "access** reaches any other Google REST method by name and returns its JSON response as rows, "
     "and **API discovery** lets you introspect which APIs and methods are reachable — all from "
     "inside SQL. List the schema to see the exact table functions and their arguments.\n\n"
-    "A typical query loads a spreadsheet range straight into SQL:\n\n"
-    "```sql\n"
-    "SELECT *\n"
-    "FROM google.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);\n"
-    "```\n\n"
+    "A typical query loads a spreadsheet range straight into SQL by naming a spreadsheet ID and "
+    "an A1 range; the per-function example queries show the exact call shapes for Sheets, Drive, "
+    "Calendar, YouTube, and the generic hatch. "
     "Pagination (Google's `nextPageToken`) is handled automatically and a `count` argument caps "
     "total rows. The connector is **READ-only**; data, quotas, billing and compliance with "
     "Google's Terms of Service remain the responsibility of the operator whose credentials are "
@@ -228,6 +393,99 @@ _GOOGLE_CATALOG = Catalog(
                         "WHERE method = 'spreadsheets.values.get';"
                     ),
                 },
+                {
+                    # Credential-free and reference-graded: the google_functions
+                    # registry view is a literal VALUES relation, so it resolves
+                    # with no secret and no Google call.
+                    "name": "list_credential_free_functions",
+                    "prompt": (
+                        "Browse the worker's function registry and list the function_name of every "
+                        "google table function that runs WITHOUT a Google credential (its "
+                        "requires_secret flag is false). Return only the function_name column, "
+                        "ordered alphabetically."
+                    ),
+                    "reference_sql": (
+                        "SELECT function_name FROM google.main.google_functions "
+                        "WHERE requires_secret = false ORDER BY function_name;"
+                    ),
+                },
+                {
+                    "name": "count_curated_adapters",
+                    "prompt": (
+                        "Using the worker's function registry, how many google table functions are "
+                        "in the 'Curated data adapters' category? Return a single count."
+                    ),
+                    "reference_sql": (
+                        "SELECT count(*) FROM google.main.google_functions WHERE category = 'Curated data adapters';"
+                    ),
+                },
+                # The remaining tasks exercise the curated adapters and the
+                # generic hatch (VGI520 coverage). Executing them needs a
+                # configured Google secret (google_service_account or
+                # google_api_key), so under `--execute`/agent-simulation they are
+                # credential-gated and cannot be reference-graded here; they
+                # document the expected call shape for an operator who has
+                # configured credentials. See the README auth section.
+                {
+                    "name": "sheet_read_range",
+                    "prompt": (
+                        "Read the first 50 rows of the A1 range 'Sheet1!A1:Z' from the Google "
+                        "spreadsheet whose ID is '1AbC', treating the first row as headers, and "
+                        "return the row_number column. (Requires a configured Google secret.)"
+                    ),
+                    "reference_sql": (
+                        "SELECT row_number FROM google.main.google_sheet('1AbC', 'Sheet1!A1:Z', header := true) "
+                        "WHERE row_number <= 50 ORDER BY row_number;"
+                    ),
+                },
+                {
+                    "name": "drive_list_pdfs",
+                    "prompt": (
+                        "List up to 25 Google Drive files whose MIME type is 'application/pdf', "
+                        "returning their id and name. (Requires a configured Google secret.)"
+                    ),
+                    "reference_sql": (
+                        "SELECT id, name FROM google.main.google_drive("
+                        "query := \"mimeType='application/pdf'\", count := 25) ORDER BY name;"
+                    ),
+                },
+                {
+                    "name": "calendar_list_events",
+                    "prompt": (
+                        "List up to 20 events from the primary Google Calendar, returning the id, "
+                        "summary and start_time columns. (Requires a configured Google secret.)"
+                    ),
+                    "reference_sql": (
+                        "SELECT id, summary, start_time FROM google.main.google_calendar("
+                        "calendar_id := 'primary', count := 20) ORDER BY start_time;"
+                    ),
+                },
+                {
+                    "name": "youtube_search_by_views",
+                    "prompt": (
+                        "Search YouTube for videos matching 'duckdb', ordered by view count, and "
+                        "return the title and view_count of the top 10. (Requires a configured "
+                        "Google secret.)"
+                    ),
+                    "reference_sql": (
+                        "SELECT title, view_count FROM google.main.google_youtube("
+                        "'duckdb', count := 10, order_by := 'viewCount') "
+                        "ORDER BY view_count DESC;"
+                    ),
+                },
+                {
+                    "name": "call_gmail_labels",
+                    "prompt": (
+                        "Using the generic google_call hatch, list the user-created Gmail label "
+                        "names for the authenticated user (api 'gmail', version 'v1', method "
+                        "'users.labels.list', userId 'me'). (Requires a configured Google secret.)"
+                    ),
+                    "reference_sql": (
+                        "SELECT result ->> '$.name' AS label "
+                        "FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}') "
+                        "WHERE result ->> '$.type' = 'user' ORDER BY label;"
+                    ),
+                },
             ]
         ),
     },
@@ -303,6 +561,7 @@ _GOOGLE_CATALOG = Catalog(
                 ),
             },
             functions=list(TABLE_FUNCTIONS),
+            views=[_FUNCTIONS_VIEW],
         ),
     ],
 )

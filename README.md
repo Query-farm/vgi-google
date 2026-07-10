@@ -73,7 +73,7 @@ escape hatch for everything else.
 | `google_sheet(spreadsheet_id, range, header := false, count := 10000)` | values as rows: `row_number`, `values` (LIST), `record` (JSON when `header`) | service account, or API key (public sheet) | single-shot (range-bounded) |
 | `google_drive(query := '', count := 100, page_size, order_by, drive_id)` | file rows (id, name, mime_type, times, size, parents LIST, owner, …) | service account | `pageToken` |
 | `google_calendar(calendar_id := 'primary', time_min, time_max, query, count := 250, …)` | event rows (summary, start/end TIMESTAMPTZ, status, organizer, …) | service account | `pageToken` |
-| `google_youtube(query, count := 25, page_size, order)` | video rows enriched with view/like/comment counts + duration | API key | `pageToken` |
+| `google_youtube(query, count := 25, page_size, order_by)` | video rows enriched with view/like/comment counts + duration | API key | `pageToken` |
 | `google_call(api, version, method, params_json)` | one JSON row per response item (list responses expanded), follows `nextPageToken` | service account / API key | `pageToken` |
 | `google_apis(name := '')` | reachable APIs (name, version, title, preferred) | none | — |
 | `google_methods(api, version)` | callable methods of an API (dotted path, params) | none | — |

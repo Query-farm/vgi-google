@@ -20,7 +20,7 @@ source_url tags are redundant and flagged, so they are deliberately omitted here
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 # Base GitHub blob URL for source files in this repo (pinned to ``main``).
 SOURCE_BASE = "https://github.com/Query-farm/vgi-google/blob/main"
@@ -35,6 +35,20 @@ def keywords_json(keywords: Sequence[str]) -> str:
     return json.dumps(list(keywords), ensure_ascii=False)
 
 
+def result_columns_json(columns: Sequence[Mapping[str, str]]) -> str:
+    """Serialize a static result schema as a ``vgi.result_columns_schema`` array.
+
+    VGI307/VGI321-323 require a table function with no backing table to declare
+    its result schema as a JSON array of ``{name, type, description}`` objects,
+    where ``type`` is a real DuckDB type and ``description`` is non-blank. This
+    replaces the retired free-form ``vgi.result_columns_md`` (VGI414).
+    """
+    return json.dumps(
+        [{"name": c["name"], "type": c["type"], "description": c["description"]} for c in columns],
+        ensure_ascii=False,
+    )
+
+
 def object_tags(
     *,
     title: str,
@@ -43,7 +57,7 @@ def object_tags(
     keywords: Sequence[str],
     relative_path: str,
     category: str,
-    result_columns_md: str | None = None,
+    result_columns: Sequence[Mapping[str, str]] | None = None,
     executable_examples: str | None = None,
 ) -> dict[str, str]:
     """Build the standard per-object discovery/description tag dict.
@@ -60,8 +74,9 @@ def object_tags(
         category: The ``vgi.category`` this object belongs to (VGI413). It MUST
             name one of the categories declared in the schema's
             ``vgi.categories`` registry.
-        result_columns_md: Optional Markdown table of returned columns
-            (``vgi.result_columns_md``), for table functions.
+        result_columns: Optional structured result schema — a sequence of
+            ``{name, type, description}`` mappings emitted as the structured
+            ``vgi.result_columns_schema`` tag (VGI307), for table functions.
         executable_examples: Optional JSON string of guaranteed-runnable examples
             (``vgi.executable_examples``).
 
@@ -76,8 +91,8 @@ def object_tags(
         "vgi.keywords": keywords_json(keywords),
         "vgi.category": category,
     }
-    if result_columns_md is not None:
-        tags["vgi.result_columns_md"] = result_columns_md
+    if result_columns is not None:
+        tags["vgi.result_columns_schema"] = result_columns_json(result_columns)
     if executable_examples is not None:
         tags["vgi.executable_examples"] = executable_examples
     return tags

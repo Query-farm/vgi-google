@@ -64,8 +64,8 @@ class YouTubeAdapter:
             "type": "video",
             "maxResults": max(1, min(getattr(args, "page_size", 0) or 25, 50)),
         }
-        if getattr(args, "order", None):
-            search_params["order"] = args.order
+        if getattr(args, "order_by", None):
+            search_params["order"] = args.order_by
         if cursor:
             search_params["pageToken"] = cursor
 

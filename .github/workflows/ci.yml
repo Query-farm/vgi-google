@@ -90,9 +90,20 @@ jobs:
       - name: vgi-lint
         uses: Query-farm/vgi-lint-check@v1
         with:
-          version: "0.37.0"
           location: "uv run google_worker.py"
           fail-on: info
+          # Static (metadata) gate only. Five of the seven table functions —
+          # google_sheet / google_drive / google_calendar / google_youtube /
+          # google_call — require a live Google credential (a
+          # `google_service_account` or `google_api_key` secret) before they can
+          # scan, so the VGI9xx execution rules (notably VGI911 scan-responds)
+          # cannot run here without a real secret. The worker's REAL execution is
+          # covered by the `integration` job below, which drives every transport
+          # against the worker with VGI_GOOGLE_MOCK=1 and canned discovery docs.
+          # The two credential-free discovery functions (google_apis /
+          # google_methods) and the google_functions view still resolve live, but
+          # execution is all-or-nothing, so it is disabled for the whole step.
+          execute: "false"
 
   # Resolve the latest published haybarn release once, so the whole matrix tests
   # the same version (and we never hardcode/pin it).
