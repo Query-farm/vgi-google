@@ -175,6 +175,16 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
         tags = object_tags(
             title="Read Google Sheets Range",
             category="Curated data adapters",
+            example_queries=[
+                {
+                    "description": "Read the first 100 data rows of a header sheet, projecting the 'name' column",
+                    "sql": (
+                        "SELECT row_number, record ->> '$.name' AS name "
+                        "FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true) "
+                        "WHERE row_number <= 100 ORDER BY row_number"
+                    ),
+                },
+            ],
             doc_llm=(
                 "## google_sheet\n\n"
                 "Read a rectangular range from a Google Sheet as SQL rows. Pass the "
@@ -291,6 +301,12 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
         tags = object_tags(
             title="List and Search Google Drive Files",
             category="Curated data adapters",
+            example_queries=[
+                {
+                    "description": "List up to 100 PDFs",
+                    "sql": "SELECT id, name FROM google.main.google_drive(query := \"mimeType='application/pdf'\", count := 100)",  # noqa: E501
+                },
+            ],
             doc_llm=(
                 "## google_drive\n\n"
                 "List or search Google Drive files and return their metadata as SQL "
@@ -415,6 +431,12 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
         tags = object_tags(
             title="List Google Calendar Events",
             category="Curated data adapters",
+            example_queries=[
+                {
+                    "description": "List up to 50 events on the primary calendar",
+                    "sql": "SELECT id, summary, start_time FROM google.main.google_calendar(calendar_id := 'primary', count := 50)",  # noqa: E501
+                },
+            ],
             doc_llm=(
                 "## google_calendar\n\n"
                 "List events from a Google Calendar as SQL rows. Defaults to the "
@@ -547,6 +569,12 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
         tags = object_tags(
             title="Search YouTube Videos",
             category="Curated data adapters",
+            example_queries=[
+                {
+                    "description": "Search YouTube for 'duckdb'",
+                    "sql": "SELECT video_id, title, view_count FROM google.main.google_youtube('duckdb', count := 25)",
+                },
+            ],
             doc_llm=(
                 "## google_youtube\n\n"
                 "Search YouTube for videos matching a query and return each hit with "
@@ -681,6 +709,16 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
         tags = object_tags(
             title="Call Any Google API Method",
             category="Generic API access",
+            example_queries=[
+                {
+                    "description": "List the user-created Gmail label names via the generic hatch",
+                    "sql": (
+                        "SELECT result ->> '$.name' AS label "
+                        "FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}') "
+                        "WHERE result ->> '$.type' = 'user' ORDER BY label"
+                    ),
+                },
+            ],
             doc_llm=(
                 "## google_call\n\n"
                 "The generic escape hatch: invoke **any** Google REST API method "
@@ -857,6 +895,12 @@ class GoogleApisFunction(TableFunctionGenerator[_ApisArgs, _ScanState]):
         tags = object_tags(
             title="Discover Reachable Google APIs",
             category="API discovery",
+            example_queries=[
+                {
+                    "description": "Find the Sheets API and its versions",
+                    "sql": "SELECT name, version, title FROM google.main.google_apis() WHERE name LIKE '%sheets%'",
+                },
+            ],
             doc_llm=(
                 "## google_apis\n\n"
                 "List the Google APIs reachable through the public **Discovery "
@@ -978,6 +1022,12 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
         tags = object_tags(
             title="List Google API Methods",
             category="API discovery",
+            example_queries=[
+                {
+                    "description": "List Drive v3 methods reachable via google_call",
+                    "sql": "SELECT method, http_method FROM google.main.google_methods('drive', 'v3')",
+                },
+            ],
             doc_llm=(
                 "## google_methods\n\n"
                 "List the callable methods of a single Google API, one row per method, "

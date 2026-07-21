@@ -35,6 +35,20 @@ def keywords_json(keywords: Sequence[str]) -> str:
     return json.dumps(list(keywords), ensure_ascii=False)
 
 
+def example_queries_json(examples: Sequence[Mapping[str, str]]) -> str:
+    """Serialize described example queries as a ``vgi.example_queries`` JSON array.
+
+    VGI515 requires each schema- and function-level example query to carry a
+    non-empty description. The native ``duckdb_functions().examples`` carrier
+    drops the description, so we additionally emit the examples as an explicit
+    ``vgi.example_queries`` tag: a JSON array of ``{description, sql}`` objects.
+    """
+    return json.dumps(
+        [{"description": e["description"], "sql": e["sql"]} for e in examples],
+        ensure_ascii=False,
+    )
+
+
 def result_columns_json(columns: Sequence[Mapping[str, str]]) -> str:
     """Serialize a static result schema as a ``vgi.result_columns_schema`` array.
 
@@ -59,6 +73,7 @@ def object_tags(
     category: str,
     result_columns: Sequence[Mapping[str, str]] | None = None,
     executable_examples: str | None = None,
+    example_queries: Sequence[Mapping[str, str]] | None = None,
 ) -> dict[str, str]:
     """Build the standard per-object discovery/description tag dict.
 
@@ -79,6 +94,9 @@ def object_tags(
             ``vgi.result_columns_schema`` tag (VGI307), for table functions.
         executable_examples: Optional JSON string of guaranteed-runnable examples
             (``vgi.executable_examples``).
+        example_queries: Optional described example queries — a sequence of
+            ``{description, sql}`` mappings emitted as the ``vgi.example_queries``
+            tag so every example carries a description (VGI515).
 
     Returns:
         A tag dict ready to drop into a function's ``Meta.tags``.
@@ -95,4 +113,6 @@ def object_tags(
         tags["vgi.result_columns_schema"] = result_columns_json(result_columns)
     if executable_examples is not None:
         tags["vgi.executable_examples"] = executable_examples
+    if example_queries is not None:
+        tags["vgi.example_queries"] = example_queries_json(example_queries)
     return tags

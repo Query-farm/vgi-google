@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http]>=0.14.0",
+#     "vgi-python[http]>=0.16.0",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
 # ]
@@ -41,169 +41,77 @@ import os
 from vgi import Worker
 from vgi.catalog import Catalog, Schema, View
 
-from vgi_google.adapters import CalendarAdapter, DriveAdapter, SheetsAdapter, YouTubeAdapter
 from vgi_google.tables import TABLE_FUNCTIONS
 
-
-def _sql_str(value: str) -> str:
-    """Return a single-quoted SQL string literal with embedded quotes escaped."""
-    escaped = value.replace("'", "''")
-    return f"'{escaped}'"
-
-
-# The worker's own function registry, one row per table function. The four
-# curated adapters source their `api`/`version` straight from the adapter
-# classes, so this browsable view can never drift from runtime behaviour. It is
-# a genuine, credential-free relation (a literal VALUES scan) that satisfies
-# VGI146 and gives an agent something to SELECT before it has to guess a
-# function's arguments — including which functions need a Google secret.
-_FUNCTION_REGISTRY: tuple[tuple[str, str, str, str, bool, str], ...] = (
-    (
-        "google_sheet",
-        f"{SheetsAdapter.api}:{SheetsAdapter.version}",
-        "Curated data adapters",
-        "service account or API key",
-        True,
-        "Read a Google Sheets A1 range as rows (values or a JSON record per row).",
+# A genuinely browsable DATA relation: the Google API directory, so an agent can
+# `SELECT * FROM google.main.google_api_directory` — no arguments, no secret — to
+# see which Google services are reachable and the exact `api`/`version` strings to
+# pass to google_call / google_methods. It surfaces upstream DATA (Google's public
+# discovery directory), NOT a catalogue of this worker's own functions, so it gives
+# an agent a zero-argument entry point (VGI146) without duplicating
+# duckdb_functions() (VGI327). The projection is a stable subset of google_apis().
+_API_DIRECTORY_VIEW = View(
+    name="google_api_directory",
+    definition=(
+        "SELECT name, version, title, preferred, discovery_url FROM google.main.google_apis() ORDER BY name, version"
     ),
-    (
-        "google_drive",
-        f"{DriveAdapter.api}:{DriveAdapter.version}",
-        "Curated data adapters",
-        "service account",
-        True,
-        "List or search Google Drive file metadata using Drive q query syntax.",
-    ),
-    (
-        "google_calendar",
-        f"{CalendarAdapter.api}:{CalendarAdapter.version}",
-        "Curated data adapters",
-        "service account",
-        True,
-        "List Google Calendar events within an optional time window.",
-    ),
-    (
-        "google_youtube",
-        f"{YouTubeAdapter.api}:{YouTubeAdapter.version}",
-        "Curated data adapters",
-        "API key",
-        True,
-        "Search YouTube videos with view, like and comment counts.",
-    ),
-    (
-        "google_call",
-        "any",
-        "Generic API access",
-        "service account or API key",
-        True,
-        "Invoke any Google REST API method by name and return its JSON response as rows.",
-    ),
-    (
-        "google_apis",
-        "discovery",
-        "API discovery",
-        "none",
-        False,
-        "List the Google APIs reachable through the public Discovery Service.",
-    ),
-    (
-        "google_methods",
-        "discovery",
-        "API discovery",
-        "none",
-        False,
-        "List the callable methods of one Google API from its discovery document.",
-    ),
-)
-
-
-def _function_registry_sql() -> str:
-    """Build a literal ``VALUES`` relation of the worker's function registry.
-
-    Sourced from :data:`_FUNCTION_REGISTRY` (whose curated rows read their
-    ``api``/``version`` from the adapter classes), so the browsable view and the
-    runtime function set stay in lockstep. Emitting literal rows keeps the view
-    credential-free: it resolves without auth, network, or a Google API call.
-    """
-    rows = ",\n        ".join(
-        "("
-        f"{_sql_str(name)}, {_sql_str(api)}, {_sql_str(category)}, "
-        f"{_sql_str(auth)}, {str(requires_secret).upper()}, {_sql_str(summary)}"
-        ")"
-        for name, api, category, auth, requires_secret, summary in _FUNCTION_REGISTRY
-    )
-    return (
-        "SELECT function_name, api, category, auth, requires_secret, summary FROM (VALUES\n"
-        f"        {rows}\n"
-        "    ) AS t(function_name, api, category, auth, requires_secret, summary)"
-    )
-
-
-_FUNCTIONS_VIEW = View(
-    name="google_functions",
-    definition=_function_registry_sql(),
-    comment="Browsable registry of every google table function: its API, category, auth, and summary.",
+    comment="Browsable directory of the Google APIs reachable through the public Discovery Service.",
     column_comments={
-        "function_name": "The table function name to call in the google.main schema.",
-        "api": "The Google API and version the function targets (or 'any'/'discovery').",
-        "category": "The function's category (Curated data adapters, Generic API access, or API discovery).",
-        "auth": "The credential the function needs: 'service account', 'API key', or 'none'.",
-        "requires_secret": "TRUE if a Google secret must be configured before the function returns rows.",
-        "summary": "One-line description of what the function returns.",
+        "name": "Google API name to pass as the first argument to google_call / google_methods.",
+        "version": "API version to pass alongside the name (e.g. 'v3').",
+        "title": "Human-readable API title.",
+        "preferred": "TRUE when this is Google's preferred version of the API.",
+        "discovery_url": "URL of the API's discovery document.",
     },
     tags={
-        "vgi.title": "Google Function Registry (browsable table)",
+        "vgi.title": "Google API Directory (browsable)",
         "vgi.category": "API discovery",
         # VGI123 classifying tags use BARE keys (not vgi.-namespaced).
         "domain": "productivity",
         "category": "api-integration",
         "topic": "google-apis",
         "vgi.doc_llm": (
-            "A ready-to-scan **registry table** of every table function this worker exposes, so an "
-            "agent can browse the surface (no parentheses, no arguments) before choosing a function "
-            "to call. Each row gives the `function_name` to call in `google.main`, the Google `api` "
-            "and version it targets, its `category`, the `auth` it needs, a `requires_secret` flag "
-            "that is TRUE for the functions that need a configured Google credential, and a one-line "
-            "`summary`. Filter `requires_secret = false` to find the two discovery functions "
-            "(google_apis, google_methods) that run with no credential at all. This view is a plain "
-            "literal relation: it resolves without auth, network, or any Google API call."
+            "A ready-to-scan **directory of the Google APIs** reachable through the public Discovery "
+            "Service, so an agent can browse the surface with a plain `SELECT` (no arguments, no "
+            "credential) before choosing what to call. Each row gives the `name` and `version` to pass "
+            "to `google_call` and `google_methods`, the human-readable `title`, whether it is Google's "
+            "`preferred` version, and the `discovery_url`. This is a thin, ordered projection of "
+            "`google_apis()`; it reads Google's public API directory, so no secret is required. Filter "
+            "by `name LIKE '%sheets%'` or `preferred` to narrow it."
         ),
         "vgi.doc_md": (
-            "## google_functions (view)\n\n"
-            "A browsable registry of every table function in the `google` catalog: its target Google "
-            "API, category, the credential it needs, whether a secret is required, and a one-line "
-            "summary. Browse it directly to discover what the worker can do; the two rows with "
-            "`requires_secret = false` are the credential-free discovery functions. The attached "
-            "example queries show how to browse and filter the registry."
+            "## google_api_directory (view)\n\n"
+            "A browsable directory of every Google API reachable through the public Discovery Service: "
+            "the `name` and `version` to pass to `google_call` / `google_methods`, the API `title`, "
+            "whether it is the `preferred` version, and the discovery-document URL. Browse it directly "
+            "to discover what is reachable — no arguments and no credential needed. The attached example "
+            "queries show how to find a service and its preferred version."
         ),
         "vgi.keywords": json.dumps(
             [
-                "functions",
-                "registry",
-                "catalog",
+                "google apis",
+                "api directory",
                 "discovery",
+                "reachable apis",
                 "browsable",
-                "table functions",
+                "services",
+                "versions",
                 "google",
-                "capabilities",
-                "auth",
+                "catalog",
             ]
         ),
         "vgi.example_queries": json.dumps(
             [
                 {
-                    "description": "Browse every google table function, its API, category and auth.",
+                    "description": "Find the Sheets APIs in the directory and their versions.",
                     "sql": (
-                        "SELECT function_name, api, category, auth "
-                        "FROM google.main.google_functions ORDER BY function_name"
+                        "SELECT name, version, title FROM google.main.google_api_directory "
+                        "WHERE name LIKE '%sheets%' ORDER BY name, version"
                     ),
                 },
                 {
-                    "description": "Find the functions that run without any Google credential.",
-                    "sql": (
-                        "SELECT function_name, summary FROM google.main.google_functions "
-                        "WHERE requires_secret = false ORDER BY function_name"
-                    ),
+                    "description": "List the preferred version of every reachable Google API.",
+                    "sql": ("SELECT name, version FROM google.main.google_api_directory WHERE preferred ORDER BY name"),
                 },
             ]
         ),
@@ -262,7 +170,7 @@ _CATALOG_DESCRIPTION_MD = (
     "columns for the high-demand surfaces (Sheets, Drive, Calendar, YouTube), **generic API "
     "access** reaches any other Google REST method by name and returns its JSON response as rows, "
     "and **API discovery** lets you introspect which APIs and methods are reachable — all from "
-    "inside SQL. List the schema to see the exact table functions and their arguments.\n\n"
+    "inside SQL.\n\n"
     "A typical query loads a spreadsheet range straight into SQL by naming a spreadsheet ID and "
     "an A1 range; the per-function example queries show the exact call shapes for Sheets, Drive, "
     "Calendar, YouTube, and the generic hatch. "
@@ -382,6 +290,19 @@ _GOOGLE_CATALOG = Catalog(
                     "reference_sql": ("SELECT name, version FROM google.main.google_apis() WHERE name = 'calendar';"),
                 },
                 {
+                    # Credential-free and reference-graded: google_api_directory is
+                    # a browsable view over the public Discovery directory, so it
+                    # resolves with no secret.
+                    "name": "browse_api_directory_for_calendar",
+                    "prompt": (
+                        "Browse the worker's Google API directory view and return the name and "
+                        "version columns for the API whose name is exactly 'calendar'."
+                    ),
+                    "reference_sql": (
+                        "SELECT name, version FROM google.main.google_api_directory WHERE name = 'calendar';"
+                    ),
+                },
+                {
                     "name": "sheets_values_get_verb",
                     "prompt": (
                         "Using the google_methods discovery function for the api 'sheets' version "
@@ -391,32 +312,6 @@ _GOOGLE_CATALOG = Catalog(
                     "reference_sql": (
                         "SELECT http_method FROM google.main.google_methods('sheets', 'v4') "
                         "WHERE method = 'spreadsheets.values.get';"
-                    ),
-                },
-                {
-                    # Credential-free and reference-graded: the google_functions
-                    # registry view is a literal VALUES relation, so it resolves
-                    # with no secret and no Google call.
-                    "name": "list_credential_free_functions",
-                    "prompt": (
-                        "Browse the worker's function registry and list the function_name of every "
-                        "google table function that runs WITHOUT a Google credential (its "
-                        "requires_secret flag is false). Return only the function_name column, "
-                        "ordered alphabetically."
-                    ),
-                    "reference_sql": (
-                        "SELECT function_name FROM google.main.google_functions "
-                        "WHERE requires_secret = false ORDER BY function_name;"
-                    ),
-                },
-                {
-                    "name": "count_curated_adapters",
-                    "prompt": (
-                        "Using the worker's function registry, how many google table functions are "
-                        "in the 'Curated data adapters' category? Return a single count."
-                    ),
-                    "reference_sql": (
-                        "SELECT count(*) FROM google.main.google_functions WHERE category = 'Curated data adapters';"
                     ),
                 },
                 # The remaining tasks exercise the curated adapters and the
@@ -545,23 +440,53 @@ _GOOGLE_CATALOG = Catalog(
                 "domain": "productivity",
                 "category": "api-integration",
                 "topic": "google-apis",
-                # VGI506 representative example queries for the schema. The two
+                # VGI515 described example queries for the schema. The two
                 # discovery functions are public (no credentials), so they run
-                # as written; the curated adapters need a configured secret.
-                "vgi.example_queries": (
-                    "SELECT name, version, title FROM google.main.google_apis() "
-                    "WHERE name LIKE '%sheets%' ORDER BY name LIMIT 5;\n"
-                    "SELECT method, http_method FROM google.main.google_methods('drive', 'v3') "
-                    "ORDER BY method LIMIT 5;\n"
-                    "SELECT * FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);\n"
-                    "SELECT id, name FROM google.main.google_drive("
-                    "query := \"mimeType='application/pdf'\", count := 100);\n"
-                    "SELECT video_id, title, view_count "
-                    "FROM google.main.google_youtube('duckdb', count := 25);"
+                # as written; the curated adapters need a configured secret. Each
+                # example projects explicit columns (never a bare SELECT *).
+                "vgi.example_queries": json.dumps(
+                    [
+                        {
+                            "description": "Discover the Sheets API's reachable versions via the Discovery Service.",
+                            "sql": (
+                                "SELECT name, version, title FROM google.main.google_apis() "
+                                "WHERE name LIKE '%sheets%' ORDER BY name LIMIT 5"
+                            ),
+                        },
+                        {
+                            "description": "Browse the Drive v3 methods you can invoke through google_call.",
+                            "sql": (
+                                "SELECT method, http_method FROM google.main.google_methods('drive', 'v3') "
+                                "ORDER BY method LIMIT 5"
+                            ),
+                        },
+                        {
+                            "description": "Read a header sheet range, projecting a named column from each row.",
+                            "sql": (
+                                "SELECT row_number, record ->> '$.name' AS name "
+                                "FROM google.main.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true) "
+                                "WHERE row_number <= 100 ORDER BY row_number"
+                            ),
+                        },
+                        {
+                            "description": "List up to 100 PDF files in Google Drive by MIME type.",
+                            "sql": (
+                                "SELECT id, name FROM google.main.google_drive("
+                                "query := \"mimeType='application/pdf'\", count := 100)"
+                            ),
+                        },
+                        {
+                            "description": "Search YouTube for 'duckdb' videos and project their view counts.",
+                            "sql": (
+                                "SELECT video_id, title, view_count "
+                                "FROM google.main.google_youtube('duckdb', count := 25)"
+                            ),
+                        },
+                    ]
                 ),
             },
             functions=list(TABLE_FUNCTIONS),
-            views=[_FUNCTIONS_VIEW],
+            views=[_API_DIRECTORY_VIEW],
         ),
     ],
 )

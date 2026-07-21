@@ -13,9 +13,11 @@
 # discovery docs and are served canned, paginated responses (tests/mock_google.py),
 # so NOTHING in the CI gate touches a live Google API.
 
-# Worker stdio command (overridable). The PEP-723 header in google_worker.py
-# pins the google client libs, so `uv run` gives the worker its dependencies.
-WORKER_STDIO   ?= uv run --python 3.13 google_worker.py
+# Worker stdio command (overridable). Run from the synced project venv (deps
+# resolved from the lockfile), matching CI's WORKER_CMD. Plain `.venv/bin/python`
+# ignores the PEP-723 header, so the worker uses the locked, current SDK rather
+# than a separately-cached `uv run` script environment.
+WORKER_STDIO   ?= .venv/bin/python google_worker.py
 
 # haybarn-unittest: the DuckDB sqllogictest runner (uv tool install haybarn-unittest).
 HAYBARN        ?= haybarn-unittest

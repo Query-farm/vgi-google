@@ -154,5 +154,17 @@ SELECT http_method FROM google.google_methods('drive', 'v3') WHERE method = 'fil
 ----
 GET
 
+# The browsable google_api_directory view surfaces the discovery directory as a
+# plain relation (no arguments, no credential) — an agent's zero-arg entry point.
+query I
+SELECT count(*) >= 3 FROM google.google_api_directory;
+----
+true
+
+query T
+SELECT name FROM google.google_api_directory WHERE name = 'sheets';
+----
+sheets
+
 statement ok
 DETACH google;

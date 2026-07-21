@@ -90,7 +90,10 @@ jobs:
       - name: vgi-lint
         uses: Query-farm/vgi-lint-check@v1
         with:
-          location: "uv run google_worker.py"
+          # Run the worker from the synced project venv (deps from the lockfile),
+          # NOT `uv run google_worker.py`: the PEP-723 script env caches a stale
+          # SDK and would emit the old catalog schema, a false mismatch.
+          location: ".venv/bin/python google_worker.py"
           fail-on: info
           # Static (metadata) gate only. Five of the seven table functions —
           # google_sheet / google_drive / google_calendar / google_youtube /
