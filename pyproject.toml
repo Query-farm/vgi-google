@@ -46,6 +46,18 @@ dev = [
 http = [
     "vgi-python[http]>=0.16.0",
 ]
+# HTTP-serving extra installed by the Docker image (`pip install '.[serve]'`);
+# an alias of `http` matching the fleet's Docker convention.
+serve = [
+    "vgi-python[http]>=0.16.0",
+]
+
+# Console entry point: the stdio worker. `vgi-google-worker` runs the importable
+# worker in `vgi_google.worker` (Docker stdio mode, and DuckDB via the
+# `bin/vgi-google-worker` launch wrapper). HTTP mode uses `vgi-serve
+# vgi_google.worker:GoogleWorker` (from vgi-python's `serve` extra).
+[project.scripts]
+vgi-google-worker = "vgi_google.worker:main"
 
 [project.urls]
 Homepage = "https://query.farm"
@@ -74,6 +86,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "D"]
 # The PEP 723 inline-script headers wrap dependency pins that should stay one-per-line.
 "google_worker.py" = ["E501"]
 "serve.py" = ["E501"]
+# The worker module carries long markdown/URL narrative strings (catalog docs).
+"vgi_google/worker.py" = ["E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
