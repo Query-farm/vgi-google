@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Database",
 ]
 dependencies = [
-    "vgi-python>=0.16.0",
+    "vgi-python>=0.30.0",
     "google-api-python-client>=2.100",
     "google-auth>=2.20",
     "pyarrow",
@@ -44,12 +44,12 @@ dev = [
 # vgi-python's `http` extra (waitress). CI's http transport leg installs this via
 # `uv sync --extra http`.
 http = [
-    "vgi-python[http]>=0.16.0",
+    "vgi-python[http]>=0.30.0",
 ]
 # HTTP-serving extra installed by the Docker image (`pip install '.[serve]'`);
 # an alias of `http` matching the fleet's Docker convention.
 serve = [
-    "vgi-python[http]>=0.16.0",
+    "vgi-python[http]>=0.30.0",
 ]
 
 # Console entry point: the stdio worker. `vgi-google-worker` runs the importable
