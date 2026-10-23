@@ -34,7 +34,7 @@ def afield(
     comment: str,
     *,
     nullable: bool = True,
-) -> pa.Field:
+) -> pa.Field[Any]:
     """Build a ``pa.Field`` carrying a column comment in its metadata.
 
     The ``comment`` metadata key is the framework's transport for column
@@ -48,7 +48,7 @@ def afield(
     )
 
 
-def json_field(name: str, comment: str) -> pa.Field:
+def json_field(name: str, comment: str) -> pa.Field[Any]:
     """Build a JSON-typed VARCHAR column (string Arrow type, tagged JSON).
 
     Use for nested / object fields that have no flat column. The value stored is

@@ -231,6 +231,9 @@ _GOOGLE_CATALOG = Catalog(
         "vgi.support_contact": "https://github.com/Query-farm/vgi-google/issues",
         "vgi.support_policy_url": "https://github.com/Query-farm/vgi-google/blob/main/README.md",
         # VGI152 analyst task suite for `vgi-lint simulate` / the agent-check.
+        # Only each task's name and prompt are published here (VGI416); the
+        # private graders (reference_sql) live in vgi-agent-tests.yaml at the
+        # repo root, merged by task name.
         # Tasks bias toward the public Discovery Service functions (no
         # credentials); the curated-adapter tasks show the expected shape even
         # though executing them needs a configured Google secret.
@@ -252,9 +255,6 @@ _GOOGLE_CATALOG = Catalog(
                         "whose name is exactly 'sheets'. Return only its name, version and title "
                         "columns."
                     ),
-                    "reference_sql": (
-                        "SELECT name, version, title FROM google.main.google_apis() WHERE name = 'sheets';"
-                    ),
                 },
                 {
                     "name": "sheets_preferred_version",
@@ -262,9 +262,6 @@ _GOOGLE_CATALOG = Catalog(
                         "Using the google_apis discovery function, what is the preferred version of "
                         "the Google API whose name is exactly 'sheets'? Return only the version "
                         "column for the row where name = 'sheets' and preferred is true."
-                    ),
-                    "reference_sql": (
-                        "SELECT version FROM google.main.google_apis() WHERE name = 'sheets' AND preferred;"
                     ),
                 },
                 {
@@ -274,10 +271,6 @@ _GOOGLE_CATALOG = Catalog(
                         "'v3', return the method and http_method columns for the method whose "
                         "dotted name is exactly 'files.list'."
                     ),
-                    "reference_sql": (
-                        "SELECT method, http_method FROM google.main.google_methods('drive', 'v3') "
-                        "WHERE method = 'files.list';"
-                    ),
                 },
                 {
                     "name": "calendar_api_reachable",
@@ -286,7 +279,6 @@ _GOOGLE_CATALOG = Catalog(
                         "is reachable. Return only the name and version columns for the API whose "
                         "name is exactly 'calendar'."
                     ),
-                    "reference_sql": ("SELECT name, version FROM google.main.google_apis() WHERE name = 'calendar';"),
                 },
                 {
                     # Credential-free and reference-graded: google_api_directory is
@@ -297,9 +289,6 @@ _GOOGLE_CATALOG = Catalog(
                         "Browse the worker's Google API directory view and return the name and "
                         "version columns for the API whose name is exactly 'calendar'."
                     ),
-                    "reference_sql": (
-                        "SELECT name, version FROM google.main.google_api_directory WHERE name = 'calendar';"
-                    ),
                 },
                 {
                     "name": "sheets_values_get_verb",
@@ -307,10 +296,6 @@ _GOOGLE_CATALOG = Catalog(
                         "Using the google_methods discovery function for the api 'sheets' version "
                         "'v4', return only the http_method column for the method whose dotted name "
                         "is exactly 'spreadsheets.values.get'."
-                    ),
-                    "reference_sql": (
-                        "SELECT http_method FROM google.main.google_methods('sheets', 'v4') "
-                        "WHERE method = 'spreadsheets.values.get';"
                     ),
                 },
                 # The remaining tasks exercise the curated adapters and the
@@ -327,10 +312,6 @@ _GOOGLE_CATALOG = Catalog(
                         "spreadsheet whose ID is '1AbC', treating the first row as headers, and "
                         "return the row_number column. (Requires a configured Google secret.)"
                     ),
-                    "reference_sql": (
-                        "SELECT row_number FROM google.main.google_sheet('1AbC', 'Sheet1!A1:Z', header := true) "
-                        "WHERE row_number <= 50 ORDER BY row_number;"
-                    ),
                 },
                 {
                     "name": "drive_list_pdfs",
@@ -338,20 +319,12 @@ _GOOGLE_CATALOG = Catalog(
                         "List up to 25 Google Drive files whose MIME type is 'application/pdf', "
                         "returning their id and name. (Requires a configured Google secret.)"
                     ),
-                    "reference_sql": (
-                        "SELECT id, name FROM google.main.google_drive("
-                        "query := \"mimeType='application/pdf'\", count := 25) ORDER BY name;"
-                    ),
                 },
                 {
                     "name": "calendar_list_events",
                     "prompt": (
                         "List up to 20 events from the primary Google Calendar, returning the id, "
                         "summary and start_time columns. (Requires a configured Google secret.)"
-                    ),
-                    "reference_sql": (
-                        "SELECT id, summary, start_time FROM google.main.google_calendar("
-                        "calendar_id := 'primary', count := 20) ORDER BY start_time;"
                     ),
                 },
                 {
@@ -361,11 +334,6 @@ _GOOGLE_CATALOG = Catalog(
                         "return the title and view_count of the top 10. (Requires a configured "
                         "Google secret.)"
                     ),
-                    "reference_sql": (
-                        "SELECT title, view_count FROM google.main.google_youtube("
-                        "'duckdb', count := 10, order_by := 'viewCount') "
-                        "ORDER BY view_count DESC;"
-                    ),
                 },
                 {
                     "name": "call_gmail_labels",
@@ -374,18 +342,13 @@ _GOOGLE_CATALOG = Catalog(
                         "names for the authenticated user (api 'gmail', version 'v1', method "
                         "'users.labels.list', userId 'me'). (Requires a configured Google secret.)"
                     ),
-                    "reference_sql": (
-                        "SELECT result ->> '$.name' AS label "
-                        "FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}') "
-                        "WHERE result ->> '$.type' = 'user' ORDER BY label;"
-                    ),
                 },
             ]
         ),
     },
     schemas=[
         Schema(
-            name="main",
+            path=["main"],
             comment="Query Google APIs from SQL: Sheets / Drive / Calendar / YouTube + a generic hatch",
             tags={
                 "vgi.title": "Google API Table Functions",

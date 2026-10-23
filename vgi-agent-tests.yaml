@@ -1,0 +1,26 @@
+# Private graders for `vgi-lint simulate` (VGI416). The worker publishes only
+# task names and prompts in vgi.agent_test_tasks; these canonical solutions and
+# grading options stay in the repo and are merged by task name.
+tasks:
+  - name: discover_sheets_api
+    reference_sql: "SELECT name, version, title FROM google.main.google_apis() WHERE name = 'sheets';"
+  - name: sheets_preferred_version
+    reference_sql: "SELECT version FROM google.main.google_apis() WHERE name = 'sheets' AND preferred;"
+  - name: drive_files_list_verb
+    reference_sql: "SELECT method, http_method FROM google.main.google_methods('drive', 'v3') WHERE method = 'files.list';"
+  - name: calendar_api_reachable
+    reference_sql: "SELECT name, version FROM google.main.google_apis() WHERE name = 'calendar';"
+  - name: browse_api_directory_for_calendar
+    reference_sql: "SELECT name, version FROM google.main.google_api_directory WHERE name = 'calendar';"
+  - name: sheets_values_get_verb
+    reference_sql: "SELECT http_method FROM google.main.google_methods('sheets', 'v4') WHERE method = 'spreadsheets.values.get';"
+  - name: sheet_read_range
+    reference_sql: "SELECT row_number FROM google.main.google_sheet('1AbC', 'Sheet1!A1:Z', header := true) WHERE row_number <= 50 ORDER BY row_number;"
+  - name: drive_list_pdfs
+    reference_sql: "SELECT id, name FROM google.main.google_drive(query := \"mimeType='application/pdf'\", count := 25) ORDER BY name;"
+  - name: calendar_list_events
+    reference_sql: "SELECT id, summary, start_time FROM google.main.google_calendar(calendar_id := 'primary', count := 20) ORDER BY start_time;"
+  - name: youtube_search_by_views
+    reference_sql: "SELECT title, view_count FROM google.main.google_youtube('duckdb', count := 10, order_by := 'viewCount') ORDER BY view_count DESC;"
+  - name: call_gmail_labels
+    reference_sql: "SELECT result ->> '$.name' AS label FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}') WHERE result ->> '$.type' = 'user' ORDER BY label;"
