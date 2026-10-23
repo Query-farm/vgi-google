@@ -19,7 +19,7 @@
 # than a separately-cached `uv run` script environment.
 WORKER_STDIO   ?= .venv/bin/python google_worker.py
 
-# haybarn-unittest: the DuckDB sqllogictest runner (uv tool install haybarn-unittest).
+# haybarn-unittest: the DuckDB sqllogictest runner (uv tool install 'haybarn-unittest<2').
 HAYBARN        ?= haybarn-unittest
 TEST_DIR        = .
 TEST_PATTERN    = test/sql/*
@@ -39,7 +39,7 @@ pytest:
 test-sql:
 	@command -v $(HAYBARN) >/dev/null 2>&1 || { \
 		echo "ERROR: $(HAYBARN) not found. Install it with:" >&2; \
-		echo "  uv tool install haybarn-unittest" >&2; \
+		echo "  uv tool install 'haybarn-unittest<2'" >&2; \
 		echo "  (then ensure ~/.local/bin is on PATH)" >&2; \
 		exit 1; \
 	}
