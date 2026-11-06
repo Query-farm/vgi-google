@@ -22,7 +22,7 @@ statement ok
 LOAD json;
 
 statement ok
-ATTACH 'google' AS google (TYPE vgi, LOCATION '${VGI_GOOGLE_WORKER}');
+ATTACH 'google' AS google (TYPE vgi, LOCATION '{VGI_GOOGLE_WORKER}');
 
 # ============================================================================
 # Schemas: the curated adapters expose their fixed, typed columns.

@@ -58,7 +58,7 @@ def main() -> int:
         env["VGI_GOOGLE_DISCOVERY_DIR"] = tmp
 
         print(f"mock Google transport enabled; running {haybarn} {pattern}")
-        proc = subprocess.run([haybarn, "--test-dir", test_dir, pattern], env=env)
+        proc = subprocess.run([haybarn, "--keep-home", "--test-dir", test_dir, pattern], env=env)
         return proc.returncode
 
 
