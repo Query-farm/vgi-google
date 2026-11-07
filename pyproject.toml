@@ -1,6 +1,6 @@
 [project]
 name = "vgi-google"
-version = "0.2.0"
+version = "0.2.1"
 description = "Query Google APIs (Sheets / Drive / Calendar / YouTube + a generic hatch) from SQL as VGI DuckDB table functions"
 readme = "README.md"
 requires-python = ">=3.13"
