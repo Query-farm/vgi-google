@@ -40,6 +40,7 @@ import os
 from vgi import Worker
 from vgi.catalog import Catalog, Schema, View
 
+from vgi_google.auth import SECRET_TYPES
 from vgi_google.tables import TABLE_FUNCTIONS
 
 # A genuinely browsable DATA relation: the Google API directory, so an agent can
@@ -458,6 +459,7 @@ class GoogleWorker(Worker):
     """Worker process hosting the ``google`` catalog."""
 
     catalog = _GOOGLE_CATALOG
+    secret_types = SECRET_TYPES
 
 
 def main() -> None:

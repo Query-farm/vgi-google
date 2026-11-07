@@ -35,6 +35,10 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+import pyarrow as pa
+from vgi.arguments import SecretLookupEntry
+from vgi.catalog.secret_type import SecretTypeSpec
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from google.auth.credentials import Credentials
 
@@ -42,6 +46,43 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 SECRET_SERVICE_ACCOUNT = "google_service_account"
 SECRET_API_KEY = "google_api_key"
 SECRET_OAUTH_USER = "google_oauth_user"  # documented; not consumed by v1 adapters
+
+#: Catalog declarations of the secret types above (``Worker.secret_types``), so
+#: ``CREATE SECRET (TYPE google_service_account, ...)`` is accepted and tools can
+#: see which credentials the keyed functions use. Both are optional at ATTACH:
+#: the discovery functions (``google_apis`` / ``google_api_methods`` and the
+#: ``google_api_directory`` view) work with no secret.
+SECRET_TYPES: list[SecretTypeSpec] = [
+    SecretTypeSpec(
+        name=SECRET_SERVICE_ACCOUNT,
+        description=(
+            "Google service-account credential (default auth for google_sheet / google_drive / "
+            "google_calendar / google_call): the JSON key in key_json, optional subject for "
+            "domain-wide delegation, optional scopes (space/comma list)."
+        ),
+        schema=pa.schema(
+            [
+                pa.field("key_json", pa.string(), metadata={"redact": "true"}),
+                pa.field("subject", pa.string()),
+                pa.field("scopes", pa.string()),
+            ]
+        ),
+    ),
+    SecretTypeSpec(
+        name=SECRET_API_KEY,
+        description=(
+            "Google API key for public-data APIs (google_youtube, public Sheets, google_call on keyed public APIs)."
+        ),
+        schema=pa.schema([pa.field("api_key", pa.string(), metadata={"redact": "true"})]),
+    ),
+]
+
+#: The secret types the keyed table functions request at bind (``Meta.required_secrets``).
+#: A missing secret resolves to nothing (no error), so keyless binds still work.
+REQUIRED_SECRETS: list[SecretLookupEntry] = [
+    SecretLookupEntry(secret_type=SECRET_SERVICE_ACCOUNT),
+    SecretLookupEntry(secret_type=SECRET_API_KEY),
+]
 
 # Environment escape hatches (tests / local smoke only).
 ENV_SERVICE_ACCOUNT_FILE = "VGI_GOOGLE_SERVICE_ACCOUNT_FILE"
@@ -182,6 +223,14 @@ def _get_secret(secrets: Any, secret_type: str) -> dict[str, Any] | None:
     """Fetch a secret dict via a SecretsAccessor-like object, tolerating None."""
     if secrets is None:
         return None
+    # Resolved secrets are keyed by DuckDB secret *name* (``__default_google_api_key``
+    # for an unnamed ``CREATE SECRET (TYPE google_api_key, ...)``); ``lookup``
+    # selects by the secret's type. Fall back to ``.get(type)`` for other shapes.
+    lookup = getattr(secrets, "lookup", None)
+    if callable(lookup):
+        found = lookup(secret_type)
+        if found:
+            return cast("dict[str, Any]", found)
     getter = getattr(secrets, "get", None)
     if getter is None:
         return None

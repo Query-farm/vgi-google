@@ -162,6 +162,7 @@ class GoogleSheetFunction(TableFunctionGenerator[_SheetArgs, _ScanState]):
         name = "google_sheet"
         description = "Read a Google Sheets range as rows (values, optional header)"
         categories = ["google", "sheets", "spreadsheet"]
+        required_secrets = auth.REQUIRED_SECRETS
         examples = [
             FunctionExample(
                 sql=(
@@ -292,6 +293,7 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
         name = "google_drive"
         description = "List/search Google Drive files as rows"
         categories = ["google", "drive", "files"]
+        required_secrets = auth.REQUIRED_SECRETS
         examples = [
             FunctionExample(
                 sql="SELECT id, name FROM google.main.google_drive(query := \"mimeType='application/pdf'\", count := 100)",  # noqa: E501
@@ -422,6 +424,7 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
         name = "google_calendar"
         description = "List Google Calendar events as rows"
         categories = ["google", "calendar", "events"]
+        required_secrets = auth.REQUIRED_SECRETS
         examples = [
             FunctionExample(
                 sql="SELECT id, summary, start_time FROM google.main.google_calendar(calendar_id := 'primary', count := 50)",  # noqa: E501
@@ -560,6 +563,7 @@ class GoogleYouTubeFunction(TableFunctionGenerator[_YouTubeArgs, _ScanState]):
         name = "google_youtube"
         description = "Search YouTube videos as rows (with view/like/comment counts)"
         categories = ["google", "youtube", "video"]
+        required_secrets = auth.REQUIRED_SECRETS
         examples = [
             FunctionExample(
                 sql="SELECT video_id, title, view_count FROM google.main.google_youtube('duckdb', count := 25)",
@@ -696,6 +700,7 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
         name = "google_call"
         description = "Call any Google API method; returns JSON rows (generic escape hatch)"
         categories = ["google", "generic", "json"]
+        required_secrets = auth.REQUIRED_SECRETS
         examples = [
             FunctionExample(
                 sql=(
