@@ -18,7 +18,7 @@ because the hard part — Google auth — is shared.
 
 ```sql
 INSTALL vgi FROM community; LOAD vgi;
-ATTACH 'google' (TYPE vgi, LOCATION 'uv run google_worker.py');
+ATTACH 'google' (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.2.1 vgi-google-worker');
 
 -- Sheets: a range as a table (service account must have access, or use an API key for a public sheet)
 SELECT * FROM google.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);
@@ -46,6 +46,47 @@ SELECT method, http_method FROM google.google_methods('drive', 'v3');
 The curated adapters are **table functions**, so they accept DuckDB's
 `name := value` arguments. They page Google as needed to satisfy `count`,
 carrying Google's `nextPageToken` as externalized scan state.
+
+## Quick start
+
+The worker isn't on PyPI; [uv](https://docs.astral.sh/uv/) runs it straight from a tagged release on GitHub. `uvx` builds an isolated environment on the first ATTACH and reuses it afterwards:
+
+```sql
+INSTALL vgi FROM community;
+LOAD vgi;
+
+ATTACH 'google' AS google (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.2.1 vgi-google-worker');
+
+-- Discover the Sheets API's reachable versions via the Discovery Service.
+SELECT name, version, title FROM google.main.google_apis() WHERE name LIKE '%sheets%' ORDER BY name LIMIT 5;
+
+-- Browse the Drive v3 methods you can invoke through google_call.
+SELECT method, http_method FROM google.main.google_methods('drive', 'v3') ORDER BY method LIMIT 5;
+```
+
+Every adapter needs Google credentials, supplied through a DuckDB secret: a
+`google_service_account` secret (service-account key JSON) for shared Sheets,
+Drive and Calendar data, or a `google_api_key` secret for public-data APIs such
+as YouTube search. See [Auth](#auth-service-account-first--via-the-secret-provider-never-inline)
+for the details and the required scopes.
+
+Change `@v0.2.1` to move to a newer release.
+
+### Other ways to run it
+
+- **Docker** (the image bundles the worker and its dependencies):
+
+  ```sql
+  ATTACH 'google' AS google (TYPE vgi, LOCATION 'docker://ghcr.io/query-farm/vgi-google:0.2.1');
+  ```
+
+- **From a local checkout** (`git clone https://github.com/Query-farm/vgi-google`), point `LOCATION` at `uv run --project /path/to/vgi-google vgi-google-worker`.
+
+### Build from source
+
+To run the worker from a checkout (stdio or HTTP), see
+[Running from a checkout](#running-from-a-checkout); for the test suite, see
+[Development & testing](#development--testing).
 
 ## Honest framing (read this first)
 
@@ -142,7 +183,7 @@ reasons (honoring the status). Discovery, transport, HTTP, auth and quota
 failures all become a clean `RuntimeError` (a DuckDB error) — the worker never
 crashes.
 
-## Install / run
+## Running from a checkout
 
 ```sh
 # stdio (DuckDB subprocess) — the PEP-723 header pins the deps for `uv run`
