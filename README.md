@@ -18,7 +18,7 @@ because the hard part — Google auth — is shared.
 
 ```sql
 INSTALL vgi FROM community; LOAD vgi;
-ATTACH 'google' (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.2.1 vgi-google-worker');
+ATTACH 'google' (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.3.0 vgi-google-worker');
 
 -- Sheets: a range as a table (service account must have access, or use an API key for a public sheet)
 SELECT * FROM google.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);
@@ -55,7 +55,7 @@ The worker isn't on PyPI; [uv](https://docs.astral.sh/uv/) runs it straight from
 INSTALL vgi FROM community;
 LOAD vgi;
 
-ATTACH 'google' AS google (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.2.1 vgi-google-worker');
+ATTACH 'google' AS google (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.3.0 vgi-google-worker');
 
 -- Discover the Sheets API's reachable versions via the Discovery Service.
 SELECT name, version, title FROM google.main.google_apis() WHERE name LIKE '%sheets%' ORDER BY name LIMIT 5;
@@ -70,14 +70,14 @@ Drive and Calendar data, or a `google_api_key` secret for public-data APIs such
 as YouTube search. See [Auth](#auth-service-account-first--via-the-secret-provider-never-inline)
 for the details and the required scopes.
 
-Change `@v0.2.1` to move to a newer release.
+Change `@v0.3.0` to move to a newer release.
 
 ### Other ways to run it
 
 - **Docker** (the image bundles the worker and its dependencies):
 
   ```sql
-  ATTACH 'google' AS google (TYPE vgi, LOCATION 'docker://ghcr.io/query-farm/vgi-google:0.2.1');
+  ATTACH 'google' AS google (TYPE vgi, LOCATION 'docker://ghcr.io/query-farm/vgi-google:0.3.0');
   ```
 
 - **From a local checkout** (`git clone https://github.com/Query-farm/vgi-google`), point `LOCATION` at `uv run --project /path/to/vgi-google vgi-google-worker`.
