@@ -64,7 +64,7 @@ _API_DIRECTORY_VIEW = View(
         "discovery_url": "URL of the API's discovery document.",
     },
     tags={
-        "vgi.title": "Google API Directory (browsable)",
+        "vgi.title": "Discoverable Google APIs",
         "vgi.category": "API discovery",
         # VGI123 classifying tags use BARE keys (not vgi.-namespaced).
         "domain": "productivity",
@@ -208,7 +208,10 @@ _GOOGLE_CATALOG = Catalog(
     comment="Query Google APIs from SQL: Sheets / Drive / Calendar / YouTube + a generic hatch.",
     source_url="https://github.com/Query-farm/vgi-google",
     tags={
-        "vgi.title": "Google APIs for SQL",
+        "vgi.title": "Google APIs",
+        "vgi.subtitle": (
+            "Read Google Sheets, Drive, Calendar, YouTube and any other Google REST API as SQL table functions."
+        ),
         "vgi.keywords": json.dumps(
             [
                 "google",
