@@ -62,10 +62,26 @@ SECRET_TYPES: list[SecretTypeSpec] = [
         ),
         schema=pa.schema(
             [
-                pa.field("key_json", pa.string(), metadata={"redact": "true"}),
-                pa.field("subject", pa.string()),
-                pa.field("scopes", pa.string()),
-            ]
+                pa.field(
+                    "key_json",
+                    pa.string(),
+                    metadata={
+                        "redact": "true",
+                        "vgi_doc": "Full JSON key file of the service account (IAM & Admin > Service Accounts > Keys)",
+                    },
+                ),
+                pa.field(
+                    "subject",
+                    pa.string(),
+                    metadata={"vgi_doc": "Optional user email to impersonate via domain-wide delegation"},
+                ),
+                pa.field(
+                    "scopes",
+                    pa.string(),
+                    metadata={"vgi_doc": "Optional OAuth scopes, space- or comma-separated; defaults per API"},
+                ),
+            ],
+            metadata={"vgi_doc_url": "https://cloud.google.com/iam/docs/keys-create-delete"},
         ),
     ),
     SecretTypeSpec(
@@ -73,7 +89,19 @@ SECRET_TYPES: list[SecretTypeSpec] = [
         description=(
             "Google API key for public-data APIs (google_youtube, public Sheets, google_call on keyed public APIs)."
         ),
-        schema=pa.schema([pa.field("api_key", pa.string(), metadata={"redact": "true"})]),
+        schema=pa.schema(
+            [
+                pa.field(
+                    "api_key",
+                    pa.string(),
+                    metadata={
+                        "redact": "true",
+                        "vgi_doc": "API key from Google Cloud console > APIs & Services > Credentials",
+                    },
+                )
+            ],
+            metadata={"vgi_doc_url": "https://cloud.google.com/docs/authentication/api-keys"},
+        ),
     ),
 ]
 

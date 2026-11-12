@@ -21,7 +21,7 @@ WORKER_STDIO   ?= .venv/bin/python google_worker.py
 
 # haybarn-unittest: the DuckDB sqllogictest runner (uv tool install --prerelease allow 'haybarn-unittest>=2.0.0rc11,<2.1').
 # haybarn 2.0 is required: its community `vgi` extension is the one that speaks the
-# worker's VGI protocol (vgi.v3 / 3.2). The runner is invoked with --keep-home so
+# worker's VGI protocol (vgi.v3 / 3.3). The runner is invoked with --keep-home so
 # it sees the extensions installed under the real $HOME (haybarn-unittest 2.0 isolates it).
 HAYBARN        ?= haybarn-unittest
 TEST_DIR        = .
