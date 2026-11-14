@@ -1,0 +1,49 @@
+{
+  "kind": "discovery#restDescription",
+  "id": "sheets:v4",
+  "name": "sheets",
+  "version": "v4",
+  "rootUrl": "https://sheets.googleapis.com/",
+  "servicePath": "",
+  "baseUrl": "https://sheets.googleapis.com/",
+  "schemas": {},
+  "resources": {
+    "spreadsheets": {
+      "resources": {
+        "values": {
+          "methods": {
+            "get": {
+              "id": "sheets.spreadsheets.values.get",
+              "path": "v4/spreadsheets/{spreadsheetId}/values/{range}",
+              "httpMethod": "GET",
+              "parameters": {
+                "spreadsheetId": {
+                  "type": "string",
+                  "location": "path",
+                  "required": true
+                },
+                "range": {
+                  "type": "string",
+                  "location": "path",
+                  "required": true
+                },
+                "majorDimension": {
+                  "type": "string",
+                  "location": "query"
+                },
+                "valueRenderOption": {
+                  "type": "string",
+                  "location": "query"
+                }
+              },
+              "parameterOrder": [
+                "spreadsheetId",
+                "range"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

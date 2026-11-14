@@ -1,0 +1,31 @@
+{
+  "range": "Log!A1:B50",
+  "majorDimension": "ROWS",
+  "values": [
+    [
+      "file_id",
+      "review_state"
+    ],
+    [
+      "DOC-A",
+      "reviewed"
+    ],
+    [
+      "DOC-B",
+      "reviewed"
+    ],
+    [
+      " DOC-A ",
+      "reviewed"
+    ],
+    [
+      "DOC-OLD",
+      "reviewed"
+    ],
+    [
+      "",
+      "reviewed"
+    ],
+    []
+  ]
+}

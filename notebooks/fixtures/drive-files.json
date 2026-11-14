@@ -1,0 +1,99 @@
+[
+  {
+    "id": "DOC-A",
+    "name": "Architecture overview",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2025-10-03T00:00:00Z",
+    "size": "2097152"
+  },
+  {
+    "id": "DOC-B",
+    "name": "Current release checklist",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2026-03-12T00:00:00Z",
+    "size": "4194304"
+  },
+  {
+    "id": "DOC-C",
+    "name": "Legacy migration guide",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2025-12-02T00:00:00Z",
+    "size": "8388608"
+  },
+  {
+    "id": "DOC-D",
+    "name": "Capacity planning notes",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2026-01-16T00:00:00Z",
+    "size": "3145728"
+  },
+  {
+    "id": "DOC-E",
+    "name": "Schema compatibility report",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2026-02-20T00:00:00Z"
+  },
+  {
+    "id": "DOC-F",
+    "name": "New onboarding guide",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2026-03-27T00:00:00Z",
+    "size": "1048576"
+  },
+  {
+    "id": "DOC-G",
+    "name": "Future-dated draft",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2026-04-03T00:00:00Z",
+    "size": "2097152"
+  },
+  {
+    "id": "DOC-H",
+    "name": "Undated operations notes",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "size": "5242880"
+  },
+  {
+    "id": "DOC-I",
+    "name": "Empty current placeholder",
+    "mimeType": "application/pdf",
+    "trashed": false,
+    "parents": [
+      "demo-folder"
+    ],
+    "modifiedTime": "2026-04-01T00:00:00Z",
+    "size": "0"
+  }
+]

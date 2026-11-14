@@ -246,3 +246,7 @@ Written by [Query.Farm](https://query.farm).
 
 Copyright 2026 Query Farm LLC - https://query.farm
 
+
+## Executed notebooks
+
+See the [Drive and Sheets reconciliation walkthrough](notebooks/README.md) for a portable, credential-free synthetic example through the real Google worker.

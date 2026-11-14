@@ -1,0 +1,9 @@
+# Explicit synthetic Google responses
+
+These documents are authored fixtures, not downloaded account data or recorded Google responses. `drive-files.json` contains nine fictional, non-trashed PDF records. Their reference clock is 2026-04-01 00:00 UTC. One modified time and one binary size are absent; one timestamp is future-dated and one file has an observed zero-byte size. `sheet-values.json` contains a header and six tracking rows: a whitespace-padded duplicate ID, an ID absent from this listing, a blank ID and an empty row deliberately expose reconciliation pitfalls.
+
+The minimal Drive v3 and Sheets v4 discovery documents are derived from this repository's test fixtures. They describe only the GET methods needed here, not the complete Google discovery documents. Google's real Python client builds request objects from them. The notebook adapter installs an in-memory `httplib2`-style transport through the worker's existing `set_http_factory` hook. It accepts only the documented PDF query/page size and sheet ID/range/render options, and raises for every other route or method. It never opens a network socket or resolves a credential.
+
+Drive returns three rows per page using explicit continuation tokens. The real worker carries those tokens across scan ticks, parses timestamps/sizes and emits Arrow rows. Sheets header interpretation and JSON records also remain in the worker. An exact four-request audit verifies the three Drive pages and single Sheets request. Neither Python nor the fixture adapter performs joins, eligibility decisions or age/size aggregation.
+
+Identifiers and titles are fictional. No real Google account, API quota, service account, email address, message, document content or permission is accessed. The notebook is a read-only reconciliation investigation, not an instruction to delete or modify files. An ID absent from this filtered listing does not prove that its underlying file was deleted or inaccessible everywhere.

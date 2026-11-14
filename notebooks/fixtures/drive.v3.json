@@ -1,0 +1,60 @@
+{
+  "kind": "discovery#restDescription",
+  "id": "drive:v3",
+  "name": "drive",
+  "version": "v3",
+  "rootUrl": "https://www.googleapis.com/drive/v3/",
+  "servicePath": "",
+  "baseUrl": "https://www.googleapis.com/drive/v3/",
+  "schemas": {},
+  "resources": {
+    "files": {
+      "methods": {
+        "list": {
+          "id": "drive.files.list",
+          "path": "files",
+          "httpMethod": "GET",
+          "parameters": {
+            "q": {
+              "type": "string",
+              "location": "query"
+            },
+            "pageSize": {
+              "type": "string",
+              "location": "query"
+            },
+            "pageToken": {
+              "type": "string",
+              "location": "query"
+            },
+            "fields": {
+              "type": "string",
+              "location": "query"
+            },
+            "orderBy": {
+              "type": "string",
+              "location": "query"
+            },
+            "driveId": {
+              "type": "string",
+              "location": "query"
+            },
+            "corpora": {
+              "type": "string",
+              "location": "query"
+            },
+            "includeItemsFromAllDrives": {
+              "type": "string",
+              "location": "query"
+            },
+            "supportsAllDrives": {
+              "type": "string",
+              "location": "query"
+            }
+          },
+          "parameterOrder": []
+        }
+      }
+    }
+  }
+}
