@@ -57,3 +57,12 @@ Category counts partition the listing. The size panel sums only known bytes (MiB
 Validated with published Haybarn 2.0.0rc11 on 2026-11-14: default and a separate 90-day experiment ran from a standalone copy containing only this directory (17 code cells and two charts each). All ten SQL invariants and the exact four-request transport audit passed in both. The shortlist shrank from three files (11 known MiB and one unknown size) to one file (8 known MiB), with identical source records. All four charts were inspected; three failure/override guards preserved the successful default.
 
 Current source checks passed: 27 unit tests, with two live credential-gated tests skipped; 48 SQL assertions in one case; Ruff, formatting, strict mypy and pydoclint. The configured metadata gate scored 100/100 at L1 with zero findings; example execution is disabled for this credentialed worker, so that metadata score does not claim live Google validation. Root source and the root lockfile remain unchanged.
+
+## SQL credential isolation
+
+The notebook creates Haybarn with a fresh temporary `secret_directory` and
+`allow_persistent_secrets=False` before attaching workers. It fully drains and
+checks an empty secret inventory before ATTACH and again before cleanup. No
+SQL secret is created. The existing synthetic HTTP factory remains the only
+transport and bypasses external Google authentication. Cleanup removes the temporary directory after closing the connection.
+Existing user SQL secrets are neither read, modified nor deleted.
