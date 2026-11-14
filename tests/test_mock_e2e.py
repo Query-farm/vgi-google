@@ -19,6 +19,7 @@ assert the externally important behavior end-to-end:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 
 import pyarrow as pa
@@ -215,3 +216,36 @@ def test_api_error_is_clean(monkeypatch: pytest.MonkeyPatch) -> None:
             invoke_table_function(GoogleDriveFunction, named={"count": 1})
     finally:
         client.set_http_factory(None)
+
+
+def test_sheet_mock_routes_by_tab(mock_google: None) -> None:
+    """The mock serves the 'Roster' / 'Log' tabs the composed examples join against."""
+    roster = invoke_table_function(GoogleSheetFunction, positional=("SID", "Roster!A1:B"), named={"header": True})
+    assert [json.loads(r)["team"] for r in roster.column("record").to_pylist()] == ["Platform", "Platform", "Data"]
+    log = invoke_table_function(GoogleSheetFunction, positional=("SID", "Log!A1:B"), named={"header": True})
+    assert [json.loads(r)["file_id"] for r in log.column("record").to_pylist()] == ["file0", "file2"]
+
+
+def test_composed_examples_published_where_agents_see_them() -> None:
+    """Each composed example is on the schema list AND in its driving function's first 5."""
+    from vgi_google.tables import (
+        COMPOSED_CALENDAR_TEAM_LOAD,
+        COMPOSED_DRIVE_UNLOGGED_PDFS,
+        COMPOSED_DRIVE_V2_ONLY_METHODS,
+        COMPOSED_EXAMPLES,
+        GoogleMethodsFunction,
+    )
+    from vgi_google.worker import GoogleWorker
+
+    schema_tags = GoogleWorker.catalog.schemas[0].tags
+    schema_sqls = [e["sql"] for e in json.loads(schema_tags["vgi.example_queries"])]
+    for example in COMPOSED_EXAMPLES:
+        assert example["sql"] in schema_sqls
+    for func, example in (
+        (GoogleDriveFunction, COMPOSED_DRIVE_UNLOGGED_PDFS),
+        (GoogleCalendarFunction, COMPOSED_CALENDAR_TEAM_LOAD),
+        (GoogleMethodsFunction, COMPOSED_DRIVE_V2_ONLY_METHODS),
+    ):
+        tagged = [e["sql"] for e in json.loads(func.Meta.tags["vgi.example_queries"])][:5]
+        native = [e.sql for e in func.Meta.examples][:5]
+        assert example["sql"] in tagged and example["sql"] in native

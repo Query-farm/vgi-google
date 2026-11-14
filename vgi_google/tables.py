@@ -63,6 +63,68 @@ DISCOVERY_EXECUTABLE_EXAMPLES = (
     "]"
 )
 
+# Composed examples: each combines two of this worker's functions in one query.
+# Defined once here and referenced from the driving function's examples AND the
+# schema-level vgi.example_queries list (worker.py). Table-function arguments
+# must be literals (DuckDB rejects LATERAL column parameters for these), so the
+# compositions are joins between independently-bound scans.
+COMPOSED_DRIVE_UNLOGGED_PDFS: dict[str, str] = {
+    "description": (
+        "Find Drive PDFs not yet recorded in a tracking sheet: anti-join google_drive against a "
+        "google_sheet log tab whose file_id column holds the IDs already logged, newest first"
+    ),
+    "sql": (
+        "SELECT f.id, f.name, f.modified_time "
+        "FROM google.main.google_drive(query := \"mimeType='application/pdf' and trashed=false\", count := 500) AS f "
+        "ANTI JOIN google.main.google_sheet('1AbC...', 'Log!A1:B', header := true) AS l "
+        "ON l.record ->> '$.file_id' = f.id "
+        "ORDER BY f.modified_time DESC, f.id"
+    ),
+}
+
+COMPOSED_CALENDAR_TEAM_LOAD: dict[str, str] = {
+    "description": (
+        "Meeting load per team for April 2026: join timed primary-calendar events to a roster sheet "
+        "(email, team) on the organizer e-mail, case-insensitively; organizers missing from the "
+        "roster are grouped as '(not on roster)'"
+    ),
+    "sql": (
+        "SELECT coalesce(r.record ->> '$.team', '(not on roster)') AS team, count(*) AS events, "
+        "sum(date_diff('minute', e.start_time, e.end_time)) AS meeting_minutes "
+        "FROM google.main.google_calendar(calendar_id := 'primary', time_min := '2026-04-01', "
+        "time_max := '2026-05-01') AS e "
+        "LEFT JOIN google.main.google_sheet('1AbC...', 'Roster!A1:B', header := true) AS r "
+        "ON lower(r.record ->> '$.email') = lower(e.organizer) "
+        "WHERE NOT e.all_day "
+        "GROUP BY ALL ORDER BY meeting_minutes DESC, team"
+    ),
+}
+
+COMPOSED_DRIVE_V2_ONLY_METHODS: dict[str, str] = {
+    "description": (
+        "Drive v2 methods with no same-named method in v3 (the legacy calls to remap before "
+        "migrating, e.g. files.insert became files.create): anti-join the two versions' "
+        "google_methods listings"
+    ),
+    "sql": (
+        "SELECT v2.method, v2.http_method "
+        "FROM google.main.google_methods('drive', 'v2') AS v2 "
+        "ANTI JOIN google.main.google_methods('drive', 'v3') AS v3 ON v3.method = v2.method "
+        "ORDER BY v2.method"
+    ),
+}
+
+COMPOSED_EXAMPLES: tuple[dict[str, str], ...] = (
+    COMPOSED_DRIVE_UNLOGGED_PDFS,
+    COMPOSED_CALENDAR_TEAM_LOAD,
+    COMPOSED_DRIVE_V2_ONLY_METHODS,
+)
+
+
+def _function_example(example: dict[str, str]) -> FunctionExample:
+    """Build a native FunctionExample from a ``{description, sql}`` constant."""
+    return FunctionExample(sql=example["sql"], description=example["description"])
+
 
 @dataclass(kw_only=True)
 class _ScanState(ArrowSerializableDataclass):
@@ -299,6 +361,7 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
                 sql="SELECT id, name FROM google.main.google_drive(query := \"mimeType='application/pdf'\", count := 100)",  # noqa: E501
                 description="List up to 100 PDFs",
             ),
+            _function_example(COMPOSED_DRIVE_UNLOGGED_PDFS),
         ]
         tags = object_tags(
             title="List and Search Google Drive Files",
@@ -308,6 +371,7 @@ class GoogleDriveFunction(TableFunctionGenerator[_DriveArgs, _ScanState]):
                     "description": "List up to 100 PDFs",
                     "sql": "SELECT id, name FROM google.main.google_drive(query := \"mimeType='application/pdf'\", count := 100)",  # noqa: E501
                 },
+                COMPOSED_DRIVE_UNLOGGED_PDFS,
             ],
             doc_llm=(
                 "## google_drive\n\n"
@@ -430,6 +494,7 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
                 sql="SELECT id, summary, start_time FROM google.main.google_calendar(calendar_id := 'primary', count := 50)",  # noqa: E501
                 description="List up to 50 events on the primary calendar",
             ),
+            _function_example(COMPOSED_CALENDAR_TEAM_LOAD),
         ]
         tags = object_tags(
             title="List Google Calendar Events",
@@ -439,6 +504,7 @@ class GoogleCalendarFunction(TableFunctionGenerator[_CalendarArgs, _ScanState]):
                     "description": "List up to 50 events on the primary calendar",
                     "sql": "SELECT id, summary, start_time FROM google.main.google_calendar(calendar_id := 'primary', count := 50)",  # noqa: E501
                 },
+                COMPOSED_CALENDAR_TEAM_LOAD,
             ],
             doc_llm=(
                 "## google_calendar\n\n"
@@ -1023,6 +1089,7 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
                 sql="SELECT method, http_method FROM google.main.google_methods('drive', 'v3')",
                 description="List Drive v3 methods reachable via google_call",
             ),
+            _function_example(COMPOSED_DRIVE_V2_ONLY_METHODS),
         ]
         tags = object_tags(
             title="List Google API Methods",
@@ -1032,6 +1099,7 @@ class GoogleMethodsFunction(TableFunctionGenerator[_MethodsArgs, _ScanState]):
                     "description": "List Drive v3 methods reachable via google_call",
                     "sql": "SELECT method, http_method FROM google.main.google_methods('drive', 'v3')",
                 },
+                COMPOSED_DRIVE_V2_ONLY_METHODS,
             ],
             doc_llm=(
                 "## google_methods\n\n"

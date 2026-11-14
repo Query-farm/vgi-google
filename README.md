@@ -31,6 +31,13 @@ FROM google.google_drive(query := "mimeType='application/pdf' and trashed=false"
 SELECT id, summary, start_time, end_time, status, organizer
 FROM google.google_calendar(calendar_id := 'primary', time_min := '2026-01-01', count := 250);
 
+-- Compose adapters: Drive PDFs not yet recorded in a tracking sheet's file_id column
+SELECT f.id, f.name, f.modified_time
+FROM google.google_drive(query := "mimeType='application/pdf' and trashed=false", count := 500) AS f
+ANTI JOIN google.google_sheet('1AbC...', 'Log!A1:B', header := true) AS l
+  ON l.record ->> '$.file_id' = f.id
+ORDER BY f.modified_time DESC;
+
 -- YouTube Data: search/list (API key)
 SELECT video_id, title, channel_title, published_at, view_count
 FROM google.google_youtube('duckdb', count := 50);

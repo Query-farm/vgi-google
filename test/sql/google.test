@@ -166,5 +166,26 @@ SELECT name FROM google.google_api_directory WHERE name = 'sheets';
 ----
 sheets
 
+# ============================================================================
+# Composed examples (vgi_google.tables COMPOSED_*): a lookup sheet joined to
+# another adapter's rows. The mock serves a 'Log' tab (file0, file2 already
+# logged) and a 'Roster' tab (organizer0/Organizer1 -> Platform, organizer2 ->
+# Data; organizer3/4 absent).
+# ============================================================================
+
+query TT
+SELECT f.id, f.name FROM google.main.google_drive(query := "mimeType='application/pdf' and trashed=false", count := 500) AS f ANTI JOIN google.main.google_sheet('1AbC...', 'Log!A1:B', header := true) AS l ON l.record ->> '$.file_id' = f.id ORDER BY f.modified_time DESC, f.id;
+----
+file4	Document 4.pdf
+file3	Document 3.pdf
+file1	Document 1.pdf
+
+query TII
+SELECT coalesce(r.record ->> '$.team', '(not on roster)') AS team, count(*) AS events, sum(date_diff('minute', e.start_time, e.end_time)) AS meeting_minutes FROM google.main.google_calendar(calendar_id := 'primary', time_min := '2026-04-01', time_max := '2026-05-01') AS e LEFT JOIN google.main.google_sheet('1AbC...', 'Roster!A1:B', header := true) AS r ON lower(r.record ->> '$.email') = lower(e.organizer) WHERE NOT e.all_day GROUP BY ALL ORDER BY meeting_minutes DESC, team;
+----
+(not on roster)	2	120
+Platform	2	120
+Data	1	60
+
 statement ok
 DETACH google;

@@ -14,6 +14,10 @@ tasks:
     reference_sql: "SELECT name, version FROM google.main.google_api_directory WHERE name = 'calendar';"
   - name: sheets_values_get_verb
     reference_sql: "SELECT http_method FROM google.main.google_methods('sheets', 'v4') WHERE method = 'spreadsheets.values.get';"
+  - name: sheets_preferred_post_methods
+    reference_sql: "SELECT method FROM google.main.google_methods('sheets', 'v4') WHERE http_method = 'POST' ORDER BY method;"
+  - name: drive_methods_kept_in_v3_by_verb
+    reference_sql: "SELECT v3.http_method, count(*) AS n FROM google.main.google_methods('drive', 'v3') AS v3 SEMI JOIN google.main.google_methods('drive', 'v2') AS v2 ON v2.method = v3.method GROUP BY v3.http_method ORDER BY v3.http_method;"
   - name: sheet_read_range
     reference_sql: "SELECT row_number FROM google.main.google_sheet('1AbC', 'Sheet1!A1:Z', header := true) WHERE row_number <= 50 ORDER BY row_number;"
   - name: drive_list_pdfs

@@ -25,12 +25,25 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httplib2
 
 # How many synthetic items exist for any paged query.
 TOTAL = 5
+
+# Canned sheet tabs keyed by tab name (see FakeGoogleHttp._sheets). 'Roster'
+# maps three of the five mock calendar organizers to teams (organizer3/4 are
+# deliberately absent); 'Log' records two of the five mock Drive file IDs.
+_SHEET_TABS: dict[str, list[list[str]]] = {
+    "Roster": [
+        ["email", "team"],
+        ["organizer0@example.com", "Platform"],
+        ["Organizer1@Example.com", "Platform"],
+        ["organizer2@example.com", "Data"],
+    ],
+    "Log": [["file_id", "status"], ["file0", "filed"], ["file2", "filed"]],
+}
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +320,7 @@ class FakeGoogleHttp:
 
     def _route(self, path: str, qs: dict[str, list[str]]) -> dict:
         if "/values/" in path:
-            return self._sheets(qs)
+            return self._sheets(unquote(path.rsplit("/values/", 1)[1]))
         if path.endswith("/files") or path.endswith("drive/v3/files"):
             return self._paged(qs, "files", _drive_file)
         if "/events" in path:
@@ -320,13 +333,14 @@ class FakeGoogleHttp:
             return {"labels": [{"id": "INBOX", "name": "INBOX"}, {"id": "SENT", "name": "SENT"}]}
         return {}
 
-    def _sheets(self, qs: dict[str, list[str]]) -> dict:
-        # A 3x2 grid with a header row.
-        return {
-            "range": "Sheet1!A1:B3",
-            "majorDimension": "ROWS",
-            "values": [["name", "score"], ["Ada", "90"], ["Bob", "85"]],
-        }
+    def _sheets(self, a1_range: str) -> dict:
+        # Routed by the sheet (tab) name so composed examples can join a lookup
+        # sheet against another adapter's rows: 'Roster' maps calendar organizer
+        # e-mails to teams, 'Log' lists Drive file IDs already recorded. Any other
+        # tab is the default 3x2 grid with a header row.
+        tab = a1_range.split("!", 1)[0]
+        values = _SHEET_TABS.get(tab, [["name", "score"], ["Ada", "90"], ["Bob", "85"]])
+        return {"range": a1_range, "majorDimension": "ROWS", "values": values}
 
     def _paged(self, qs: dict[str, list[str]], field: str, factory: Any) -> dict:
         idx = _page_index(qs)

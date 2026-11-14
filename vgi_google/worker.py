@@ -41,7 +41,7 @@ from vgi import Worker
 from vgi.catalog import Catalog, Schema, View
 
 from vgi_google.auth import SECRET_TYPES
-from vgi_google.tables import TABLE_FUNCTIONS
+from vgi_google.tables import COMPOSED_EXAMPLES, TABLE_FUNCTIONS
 
 # A genuinely browsable DATA relation: the Google API directory, so an agent can
 # `SELECT * FROM google.main.google_api_directory` — no arguments, no secret — to
@@ -302,6 +302,28 @@ _GOOGLE_CATALOG = Catalog(
                         "is exactly 'spreadsheets.values.get'."
                     ),
                 },
+                # Composed, credential-free tasks: each needs two discovery
+                # objects in combination (the directory view to pick the version,
+                # or two google_methods listings joined), and is reference-graded
+                # live against Google's public discovery documents.
+                {
+                    "name": "sheets_preferred_post_methods",
+                    "prompt": (
+                        "Look up the preferred version of the Google API named exactly 'sheets' in "
+                        "the worker's Google API directory view, then use google_methods for that "
+                        "api and version to list the methods whose http_method is 'POST'. Return "
+                        "only the method column, ordered by method."
+                    ),
+                },
+                {
+                    "name": "drive_methods_kept_in_v3_by_verb",
+                    "prompt": (
+                        "Compare the Drive API versions 'v2' and 'v3' with google_methods: count the "
+                        "dotted method names that exist in BOTH versions, grouped by the v3 "
+                        "http_method. Return two columns, http_method and n (the BIGINT count), "
+                        "ordered by http_method."
+                    ),
+                },
                 # The remaining tasks exercise the curated adapters and the
                 # generic hatch (VGI520 coverage). Executing them needs a
                 # configured Google secret (google_service_account or
@@ -448,6 +470,9 @@ _GOOGLE_CATALOG = Catalog(
                                 "FROM google.main.google_youtube('duckdb', count := 25)"
                             ),
                         },
+                        # Composed examples (two of this worker's functions in one
+                        # query), shared with the driving function's example list.
+                        *COMPOSED_EXAMPLES,
                     ]
                 ),
             },
