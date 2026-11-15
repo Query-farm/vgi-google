@@ -28,3 +28,29 @@ tasks:
     reference_sql: "SELECT title, view_count FROM google.main.google_youtube('duckdb', count := 10, order_by := 'viewCount') ORDER BY view_count DESC;"
   - name: call_gmail_labels
     reference_sql: "SELECT result ->> '$.name' AS label FROM google.main.google_call('gmail', 'v1', 'users.labels.list', '{\"userId\":\"me\"}') WHERE result ->> '$.type' = 'user' ORDER BY label;"
+  - name: workspace_admins_without_2sv
+    reference_sql: "SELECT primary_email FROM google.workspace.users() WHERE is_admin AND NOT is_enrolled_in_2sv ORDER BY primary_email;"
+  - name: workspace_largest_groups
+    reference_sql: "SELECT email, direct_members_count FROM google.workspace.groups() ORDER BY direct_members_count DESC, email LIMIT 5;"
+  - name: workspace_group_owners
+    reference_sql: "SELECT email FROM google.workspace.group_members('eng@example.com') WHERE role = 'OWNER' ORDER BY email;"
+  - name: workspace_org_unit_tree
+    reference_sql: "SELECT org_unit_path FROM google.workspace.org_units() ORDER BY org_unit_path;"
+  - name: workspace_unverified_domains
+    reference_sql: "SELECT domain_name FROM google.workspace.domains() WHERE NOT verified ORDER BY domain_name;"
+  - name: workspace_custom_roles
+    reference_sql: "SELECT role_name FROM google.workspace.roles() WHERE NOT is_system_role ORDER BY role_name;"
+  - name: workspace_role_holders
+    reference_sql: "SELECT r.role_name, u.primary_email FROM google.workspace.role_assignments() AS a JOIN google.workspace.roles() AS r USING (role_id) LEFT JOIN google.workspace.users() AS u ON u.id = a.assigned_to ORDER BY r.role_name, u.primary_email;"
+  - name: workspace_chromeos_expired
+    reference_sql: "SELECT serial_number FROM google.workspace.chromeos_devices() WHERE auto_update_through < TIMESTAMPTZ '2026-11-15 00:00:00+00' ORDER BY serial_number;"
+  - name: workspace_mobile_stale
+    reference_sql: "SELECT resource_id FROM google.workspace.mobile_devices() WHERE last_sync < TIMESTAMPTZ '2026-10-01 00:00:00+00' ORDER BY resource_id;"
+  - name: workspace_failed_logins_week
+    reference_sql: "SELECT time, actor_email FROM google.workspace.activities('login') WHERE event_name = 'login_failure' AND time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND time < TIMESTAMPTZ '2026-11-08 00:00:00+00' ORDER BY time;"
+  - name: workspace_user_count_on_day
+    reference_sql: "SELECT int_value FROM google.workspace.usage_reports() WHERE date = DATE '2026-11-10' AND parameter = 'accounts:num_users';"
+  - name: workspace_high_alerts
+    reference_sql: "SELECT alert_id, type FROM google.workspace.alerts() WHERE create_time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND severity = 'HIGH' ORDER BY alert_id;"
+  - name: workspace_group_allows_outsiders
+    reference_sql: "SELECT who_can_join, allow_external_members FROM google.workspace.group_settings('eng@example.com');"

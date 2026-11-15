@@ -103,8 +103,12 @@ jobs:
           fail-on: info
           # Static (metadata) gate only. Five of the seven table functions —
           # google_sheet / google_drive / google_calendar / google_youtube /
-          # google_call — require a live Google credential (a
-          # `google_service_account` or `google_api_key` secret) before they can
+          # google_call — and all thirteen google.workspace.* functions (users,
+          # groups, group_members, org_units, domains, roles, role_assignments,
+          # chromeos_devices, mobile_devices, activities, usage_reports, alerts,
+          # group_settings: a Workspace-admin `google_service_account` secret
+          # with domain-wide delegation `subject`) require a live Google
+          # credential (a `google_service_account` or `google_api_key` secret) before they can
           # scan, so the VGI9xx execution rules (notably VGI911 scan-responds)
           # cannot run here without a real secret. The worker's REAL execution is
           # covered by the `integration` job below, which drives every transport

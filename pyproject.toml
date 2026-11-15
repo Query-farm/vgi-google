@@ -26,7 +26,14 @@ classifiers = [
     "Topic :: Database",
 ]
 dependencies = [
-    "vgi-python>=0.51.0",
+    # The duckdb extra is the engine vgi-python uses to bind and re-apply pushed
+    # SQL filters (the google.workspace functions declare filter_pushdown).
+    "vgi-python[duckdb]>=0.51.0",
+    # vgi-python's filter evaluator registers a DuckDB Python UDF, which needs
+    # numpy (and pytz to hand back TIMESTAMPTZ values); the SDK's duckdb extra
+    # pulls in neither (as of 0.51.0).
+    "numpy",
+    "pytz",
     "google-api-python-client>=2.100",
     "google-auth>=2.20",
     "pyarrow",

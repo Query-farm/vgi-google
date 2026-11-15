@@ -4,7 +4,7 @@
 
 <p align="center"><em>A <a href="https://query.farm">Query.Farm</a> VGI worker for DuckDB.</em></p>
 
-# Query Google APIs — Sheets, Drive, Calendar & YouTube in DuckDB
+# Query Google APIs — Sheets, Drive, Calendar, YouTube & Workspace Admin in DuckDB
 
 > **vgi-google** · a [Query.Farm](https://query.farm) VGI worker
 
@@ -44,6 +44,11 @@ FROM google.google_youtube('duckdb', count := 50);
 
 -- Generic escape hatch for any other Google API
 SELECT * FROM google.google_call('gmail', 'v1', 'users.messages.list', '{"userId":"me"}');
+
+-- Google Workspace admin data (schema `workspace`): WHERE predicates are pushed to the API
+SELECT time, actor_email, ip_address
+FROM google.workspace.activities('login')
+WHERE event_name = 'login_failure' AND time >= TIMESTAMPTZ '2026-11-01 00:00:00+00';
 
 -- Discovery: what is reachable?
 SELECT name, version, title FROM google.google_apis() WHERE name LIKE '%calendar%';
@@ -134,6 +139,113 @@ Missing fields become SQL `NULL`.
 functions are **pinned to a single worker** so a parallel scan cannot re-emit and
 duplicate rows.
 
+## Google Workspace admin data (`google.workspace`)
+
+The `workspace` schema reads a Workspace tenant's administrative data as typed
+tables: the **Admin SDK Directory** and **Reports** APIs, the **Alert Center**
+API and the **Groups Settings** API. Everything is READ-only.
+
+| Function | Rows | API method | Read-only scope (`https://www.googleapis.com/auth/…`) |
+| --- | --- | --- | --- |
+| `users(customer, domain, query, show_deleted, order_by, projection)` | user accounts | `users.list` | `admin.directory.user.readonly` |
+| `groups(customer, domain, user_key, query)` | groups (or one user's groups) | `groups.list` | `admin.directory.group.readonly` |
+| `group_members(group_key, roles, include_derived_membership)` | members of one group | `members.list` | `admin.directory.group.member.readonly` |
+| `org_units(customer, org_unit_path, type)` | organizational units | `orgunits.list` | `admin.directory.orgunit.readonly` |
+| `domains(customer)` | domains + alias domains | `domains.list` | `admin.directory.domain.readonly` |
+| `roles(customer)` | admin roles; `privileges` is `LIST<STRUCT>` | `roles.list` | `admin.directory.rolemanagement.readonly` |
+| `role_assignments(customer, role_id, user_key)` | who holds which role | `roleAssignments.list` | `admin.directory.rolemanagement.readonly` |
+| `chromeos_devices(customer, query, org_unit_path)` | ChromeOS devices | `chromeosdevices.list` | `admin.directory.device.chromeos.readonly` |
+| `mobile_devices(customer, query)` | mobile devices | `mobiledevices.list` | `admin.directory.device.mobile.readonly` |
+| `activities(application, user_key, start_time, end_time, event_name, actor_ip_address, filters, org_unit_id, group_id_filter)` | audit log, **one row per event**; `parameters` is a JSON object | `activities.list` | `admin.reports.audit.readonly` |
+| `usage_reports(report, date, parameters, user_key, filters, org_unit_id, customer_id)` | daily usage, one row per (entity, date, metric) | `customerUsageReports.get` / `userUsageReport.get` | `admin.reports.usage.readonly` |
+| `alerts(filter, order_by, customer_id)` | Alert Center alerts | `alerts.list` | `apps.alerts` |
+| `group_settings(group_email)` | one group's access/moderation settings | Groups Settings `groups.get` | `apps.groups.settings` |
+
+`activities` takes any Reports application: `login`, `admin`, `drive`, `token`,
+`saml`, `groups`, `calendar`, `meet`, `mobile`, `chrome`, `user_accounts`,
+`context_aware_access`, `vault`, … (the full list is the argument's declared
+choices). Every function also takes `count` (row cap) and, where the API pages,
+`page_size`.
+
+### What pushes down
+
+The functions declare filter pushdown: DuckDB hands the worker the `WHERE`
+predicates, the worker translates what the API can express into its own
+server-side filters, and then **re-applies the exact SQL predicate** to every
+batch, so a partly-pushable `WHERE` is still correct. Pushed filters are always
+a superset of the SQL predicate (time bounds are widened by a second; prefix /
+org-unit-chain matches are broader than equality).
+
+| Function | SQL predicate | Becomes |
+| --- | --- | --- |
+| `activities` | `time >=`, `>`, `<`, `<=`, `BETWEEN` | `startTime` / `endTime` |
+| | `event_name = …` | `eventName` |
+| | `actor_email = …` | the `userKey` path segment (when `user_key` is `'all'`) |
+| | `ip_address = …` | `actorIpAddress` |
+| `usage_reports` | `date =` / `IN` / range | the report days requested (one request per day, ≤ 92 days) |
+| | `parameter =` / `IN` (`app:metric` names) | `parameters` |
+| | `user_email = …` | `userKey` (user report) |
+| `users` | `primary_email = …` | search clause `email='…'` (also matches aliases) |
+| | `org_unit_path = …` | `orgUnitPath='…'` (also matches sub-units) |
+| | `is_admin`, `is_delegated_admin`, `suspended`, `archived`, `is_enrolled_in_2sv`, `is_enforced_in_2sv` (bare, `NOT`, `= true/false`) | `isAdmin=true` … |
+| `groups` | `email = …`, `name = …` | search clauses (not combined with `user_key`) |
+| `group_members` | `role =` / `IN` | `roles` |
+| `role_assignments` | `role_id = …` / `assigned_to = …` | `roleId` / `userKey` (one per request) |
+| `chromeos_devices` | `org_unit_path = …` | `orgUnitPath` |
+| `alerts` | bounds on `create_time` / `start_time`; `type` / `source` `=` or `IN` | an Alert Center `filter` expression, AND-ed with the `filter` argument |
+
+`count` caps the rows fetched from the API, i.e. before any predicate the API
+could not apply. `usage_reports` needs a day: pass `date := 'YYYY-MM-DD'` or
+filter the `date` column.
+
+### Auth: service account with domain-wide delegation
+
+Workspace admin data is read **as an administrator**. Use a service account
+with [domain-wide delegation](https://support.google.com/a/answer/162106) and
+set the secret's `subject` to an admin's e-mail (or grant the service account
+an admin role directly and omit `subject`):
+
+1. Create a service account and a JSON key in Google Cloud; enable the Admin
+   SDK API (plus the Alert Center / Groups Settings APIs if you use them).
+2. In the Admin console (Security → API controls → Domain-wide delegation), add
+   the service account's client ID with the read-only scopes from the table
+   above for the functions you use. Each function requests only its own scope.
+3. Create the secret:
+
+```sql
+CREATE SECRET workspace_admin (
+    TYPE google_service_account,
+    key_json '{"type": "service_account", ...}',
+    subject 'admin@example.com'
+);
+
+SELECT primary_email, last_login_time
+FROM google.workspace.users()
+WHERE is_admin AND NOT is_enrolled_in_2sv;
+
+-- Who holds which admin role
+SELECT r.role_name, u.primary_email, a.scope_type
+FROM google.workspace.role_assignments() AS a
+JOIN google.workspace.roles() AS r USING (role_id)
+LEFT JOIN google.workspace.users() AS u ON u.id = a.assigned_to;
+
+-- Daily e-mails sent per user over a week
+SELECT date, user_email, int_value AS emails_sent
+FROM google.workspace.usage_reports(report := 'user', parameters := 'gmail:num_emails_sent')
+WHERE date BETWEEN DATE '2026-11-01' AND DATE '2026-11-07';
+
+-- High-severity alerts this month, and a group's external-member setting
+SELECT create_time, type, status FROM google.workspace.alerts()
+WHERE create_time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND severity = 'HIGH';
+SELECT who_can_join, allow_external_members FROM google.workspace.group_settings('eng@example.com');
+```
+
+A `401`/`403`/token error from these functions carries a hint naming the scope
+to authorize. Reports data lags by hours (activities) to days (usage), and the
+audit log keeps about 180 days. Anything the curated tables don't cover (data
+transfers, tokens, Chrome printers, …) stays reachable through
+`google_call('admin', 'directory_v1', …)`.
+
 ## Auth (service-account-first) — via the secret provider, never inline
 
 Credentials are resolved through the VGI **secret provider**, in priority order:
@@ -186,7 +298,7 @@ sense, but they are not curated adapters.
 
 Every call has a **per-request timeout** and **bounded retry with exponential
 backoff** on `429` / `5xx` and Google's `rateLimitExceeded` / `quotaExceeded`
-reasons (honoring the status). Discovery, transport, HTTP, auth and quota
+reasons, honoring a `Retry-After` header when Google sends one (capped at 60 s). Discovery, transport, HTTP, auth and quota
 failures all become a clean `RuntimeError` (a DuckDB error) — the worker never
 crashes.
 

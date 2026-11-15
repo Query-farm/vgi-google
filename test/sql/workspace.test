@@ -1,0 +1,311 @@
+# name: test/sql/workspace.test
+# description: google.workspace.* (Admin SDK Directory/Reports, Alert Center, Groups Settings) E2E
+# group: [vgi_google]
+#
+# Driven by scripts/run_sql_e2e.py with VGI_GOOGLE_MOCK=1. The worker builds its
+# clients from Google's REAL discovery documents (tests/fixtures/discovery) and
+# is served by tests/mock_workspace.py, which applies the server-side filters the
+# adapters push down. Every activity's `etag` echoes the request (user key +
+# query string), so these tests can assert WHICH predicates reached the API —
+# the worker re-applies the SQL predicate, so the rows alone cannot tell.
+
+require-env VGI_GOOGLE_WORKER
+
+statement ok
+LOAD vgi;
+
+statement ok
+INSTALL json;
+
+statement ok
+LOAD json;
+
+statement ok
+ATTACH 'google' AS google (TYPE vgi, LOCATION '{VGI_GOOGLE_WORKER}');
+
+# ============================================================================
+# Directory
+# ============================================================================
+
+query TT
+SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM google.workspace.users())
+WHERE column_name IN ('id', 'last_login_time', 'aliases', 'is_admin') ORDER BY column_name;
+----
+aliases	VARCHAR[]
+id	VARCHAR
+is_admin	BOOLEAN
+last_login_time	TIMESTAMP WITH TIME ZONE
+
+query TTT
+SELECT primary_email, org_unit_path, last_login_time FROM google.workspace.users() ORDER BY primary_email;
+----
+ada@example.com	/Engineering	2026-11-10 08:00:00+00
+bob@example.com	/Sales	NULL
+cy@example.com	/Sales/EMEA	2026-03-01 09:30:00+00
+
+# Bare boolean predicates (pushed as isAdmin=true isEnrolledIn2Sv=false).
+query T
+SELECT primary_email FROM google.workspace.users() WHERE is_admin AND NOT is_enrolled_in_2sv;
+----
+ada@example.com
+
+# orgUnitPath= matches sub-units server side; the worker re-applies the exact predicate.
+query T
+SELECT primary_email FROM google.workspace.users() WHERE org_unit_path = '/Sales';
+----
+bob@example.com
+
+# A predicate the API cannot express still filters correctly (applied by the worker).
+query T
+SELECT primary_email FROM google.workspace.users() WHERE suspended OR is_delegated_admin ORDER BY 1;
+----
+bob@example.com
+cy@example.com
+
+# Paging one user per request round-trips the pageToken.
+query I
+SELECT count(DISTINCT id) FROM google.workspace.users(page_size := 1);
+----
+3
+
+query TIT
+SELECT email, direct_members_count, aliases FROM google.workspace.groups() ORDER BY email;
+----
+eng@example.com	3	[engineering@example.com]
+sales@example.com	12	NULL
+
+query T
+SELECT email FROM google.workspace.groups(user_key := 'partner@other.org');
+----
+eng@example.com
+
+query TT
+SELECT email, role FROM google.workspace.group_members('eng@example.com')
+WHERE role IN ('OWNER', 'MANAGER') ORDER BY role;
+----
+bob@example.com	MANAGER
+ada@example.com	OWNER
+
+query TT
+SELECT org_unit_path, parent_org_unit_path FROM google.workspace.org_units() ORDER BY org_unit_path;
+----
+/Engineering	/
+/Sales	/
+/Sales/EMEA	/Sales
+
+query TT
+SELECT domain_name, creation_time FROM google.workspace.domains() WHERE NOT verified ORDER BY domain_name;
+----
+example.org	2024-01-01 00:00:00+00
+
+query TI
+SELECT role_name, len(privileges) FROM google.workspace.roles() WHERE NOT is_system_role;
+----
+Helpdesk	2
+
+query T
+SELECT privileges[1].privilege_name FROM google.workspace.roles() WHERE is_super_admin_role;
+----
+SUPER_ADMIN
+
+query TT
+SELECT assigned_to, scope_type FROM google.workspace.role_assignments() WHERE role_id = '9170516996784130';
+----
+100000000000000000002	ORG_UNIT
+
+# Composed: who holds which admin role.
+query TTT
+SELECT r.role_name, u.primary_email, a.scope_type
+FROM google.workspace.role_assignments() AS a
+JOIN google.workspace.roles() AS r USING (role_id)
+LEFT JOIN google.workspace.users() AS u ON u.id = a.assigned_to
+ORDER BY r.role_name, u.primary_email;
+----
+Helpdesk	bob@example.com	ORG_UNIT
+_SEED_ADMIN_ROLE	ada@example.com	CUSTOMER
+
+query TTT
+SELECT serial_number, model, auto_update_through FROM google.workspace.chromeos_devices()
+WHERE auto_update_through < TIMESTAMPTZ '2026-11-15 00:00:00+00' ORDER BY auto_update_through;
+----
+5CD1	Acer Chromebook 314	2026-06-01 00:00:00+00
+
+query TI
+SELECT model, count(*) FROM google.workspace.chromeos_devices() WHERE org_unit_path = '/Classrooms' GROUP BY model;
+----
+Acer Chromebook 314	1
+
+query TTT
+SELECT email[1], model, security_patch_level FROM google.workspace.mobile_devices()
+WHERE last_sync < TIMESTAMPTZ '2026-10-01 00:00:00+00';
+----
+bob@example.com	Pixel 8	2024-10-01 00:00:00+00
+
+# ============================================================================
+# Reports: activities (audit log)
+# ============================================================================
+
+query T
+SELECT column_type FROM (DESCRIBE SELECT * FROM google.workspace.activities('login')) WHERE column_name = 'time';
+----
+TIMESTAMP WITH TIME ZONE
+
+# 4 login activities, one carrying two events -> 5 event rows.
+query I
+SELECT count(*) FROM google.workspace.activities('login');
+----
+5
+
+# Time range + event name are pushed into startTime / endTime / eventName.
+query TTT
+SELECT time, actor_email, parameters ->> '$.login_failure_type'
+FROM google.workspace.activities('login')
+WHERE event_name = 'login_failure'
+  AND time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND time < TIMESTAMPTZ '2026-11-08 00:00:00+00'
+ORDER BY time;
+----
+2026-11-02 10:30:00+00	cy@example.com	login_failure_invalid_password
+2026-11-05 23:59:59+00	cy@example.com	login_failure_invalid_password
+
+query T
+SELECT DISTINCT etag FROM google.workspace.activities('login')
+WHERE event_name = 'login_failure'
+  AND time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND time < TIMESTAMPTZ '2026-11-08 00:00:00+00';
+----
+q:all?endTime=2026-11-08T00%3A00%3A01.000Z&eventName=login_failure&maxResults=1000&startTime=2026-10-31T23%3A59%3A59.000Z
+
+# actor_email / ip_address equality become the userKey path segment and actorIpAddress.
+query TT
+SELECT event_name, etag FROM google.workspace.activities('admin')
+WHERE actor_email = 'ada@example.com' AND ip_address = '203.0.113.5' ORDER BY event_name;
+----
+CHANGE_PASSWORD	q:ada@example.com?actorIpAddress=203.0.113.5&maxResults=1000
+SUSPEND_USER	q:ada@example.com?actorIpAddress=203.0.113.5&maxResults=1000
+
+# Repeated / nested parameter values become JSON arrays / objects.
+query TT
+SELECT parameters ->> '$.app_name', parameters -> '$.scope_data[0].product_bucket'
+FROM google.workspace.activities('token') WHERE event_name = 'authorize';
+----
+Example CRM	["DRIVE"]
+
+# Date arguments are normalized to the RFC-3339 the Reports API's pattern requires.
+query I
+SELECT count(*) FROM google.workspace.activities('login', start_time := '2026-11-03', end_time := '2026-11-10');
+----
+2
+
+statement error
+SELECT * FROM google.workspace.activities('not_an_app');
+----
+invalid value
+
+# Composed: failed sign-ins per org unit.
+query TI
+SELECT u.org_unit_path, count(*) AS failures
+FROM google.workspace.activities('login') AS e
+JOIN google.workspace.users() AS u ON u.primary_email = e.actor_email
+WHERE e.event_name = 'login_failure'
+  AND e.time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND e.time < TIMESTAMPTZ '2026-12-01 00:00:00+00'
+GROUP BY ALL ORDER BY failures DESC;
+----
+/Sales/EMEA	2
+/Engineering	1
+
+# ============================================================================
+# Reports: usage
+# ============================================================================
+
+query TI
+SELECT parameter, int_value FROM google.workspace.usage_reports()
+WHERE date = DATE '2026-11-10' AND parameter IN ('accounts:num_users', 'accounts:used_quota_in_mb')
+ORDER BY parameter;
+----
+accounts:num_users	3
+accounts:used_quota_in_mb	20480
+
+query TT
+SELECT parameter, bool_value FROM google.workspace.usage_reports(date := '2026-11-10')
+WHERE bool_value IS NOT NULL;
+----
+accounts:apps_admin_enabled	true
+
+# A date range expands to one request per day (empty days are skipped).
+query TTI
+SELECT date, user_email, int_value
+FROM google.workspace.usage_reports(report := 'user', parameters := 'gmail:num_emails_sent', page_size := 1)
+WHERE date BETWEEN DATE '2026-10-30' AND DATE '2026-11-02'
+ORDER BY date, user_email;
+----
+2026-11-01	ada@example.com	4
+2026-11-01	bob@example.com	8
+2026-11-02	ada@example.com	5
+2026-11-02	bob@example.com	10
+
+query TI
+SELECT date, int_value FROM google.workspace.usage_reports(report := 'user')
+WHERE date > DATE '2026-10-31' AND date <= DATE '2026-11-03'
+  AND user_email = 'bob@example.com' AND parameter = 'gmail:num_emails_sent'
+ORDER BY date;
+----
+2026-11-01	8
+2026-11-02	10
+2026-11-03	12
+
+statement error
+SELECT count(*) FROM google.workspace.usage_reports();
+----
+needs a report day
+
+# ============================================================================
+# Alert Center / Groups Settings
+# ============================================================================
+
+query TTT
+SELECT alert_id, type, status FROM google.workspace.alerts()
+WHERE create_time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND severity = 'HIGH';
+----
+a-1	Suspicious login	NOT_STARTED
+
+query TI
+SELECT type, count(*) FROM google.workspace.alerts()
+WHERE type IN ('Device compromised', 'User reported phishing') GROUP BY type ORDER BY type;
+----
+Device compromised	1
+User reported phishing	1
+
+query TT
+SELECT alert_id, data ->> '$.email' FROM google.workspace.alerts() WHERE data IS NOT NULL;
+----
+a-1	cy@example.com
+
+query TTTT
+SELECT who_can_join, who_can_post_message, allow_external_members, members_can_post_as_the_group
+FROM google.workspace.group_settings('eng@example.com');
+----
+INVITED_CAN_JOIN	ALL_IN_DOMAIN_CAN_POST	true	false
+
+query T
+SELECT settings ->> '$.whoCanAddReferences' FROM google.workspace.group_settings('eng@example.com');
+----
+NONE
+
+statement error
+SELECT * FROM google.workspace.group_settings('missing@example.com');
+----
+404
+
+# ============================================================================
+# Auth: a 403 carries the domain-wide-delegation hint
+# ============================================================================
+
+statement error
+SELECT * FROM google.workspace.mobile_devices(customer := 'C0forbidden');
+----
+domain-wide delegation
+
+# The generic hatch now expands usage reports that carry a `warnings` list.
+query I
+SELECT count(*) FROM google.google_call('admin', 'reports_v1', 'userUsageReport.get', '{"userKey":"all","date":"2026-11-01"}');
+----
+2

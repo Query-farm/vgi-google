@@ -368,4 +368,8 @@ def http_factory(api: str, version: str) -> tuple[FakeGoogleHttp, dict]:
     Raises KeyError for an API with no canned discovery doc, surfacing the gap
     rather than silently building nothing.
     """
+    from tests.mock_workspace import WORKSPACE_DISCOVERY_DOCS, FakeWorkspaceHttp
+
+    if (api, version) in WORKSPACE_DISCOVERY_DOCS:
+        return FakeWorkspaceHttp(), WORKSPACE_DISCOVERY_DOCS[(api, version)]
     return FakeGoogleHttp(), DISCOVERY_DOCS[(api, version)]

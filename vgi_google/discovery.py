@@ -178,7 +178,7 @@ def execute(request: Any, *, retries: int = DEFAULT_RETRIES, timeout: float = DE
             retryable = status in (429, 500, 502, 503, 504) or _is_quota_error(exc)
             last_error = _format_http_error_from_exc(exc)
             if retryable and attempt < retries:
-                _sleep(_BACKOFF_BASE * (2**attempt))
+                _sleep(_retry_after(exc) or _BACKOFF_BASE * (2**attempt))
                 continue
             raise GoogleApiError(last_error) from exc
         except (httplib2.HttpLib2Error, OSError, TimeoutError) as exc:
@@ -189,6 +189,23 @@ def execute(request: Any, *, retries: int = DEFAULT_RETRIES, timeout: float = DE
             raise GoogleApiError(last_error) from exc
 
     raise GoogleApiError(last_error)
+
+
+#: Upper bound on a server-requested ``Retry-After`` wait.
+MAX_RETRY_AFTER = 60.0
+
+
+def _retry_after(exc: HttpError) -> float | None:
+    """Seconds from a ``Retry-After`` response header (delta-seconds form), capped."""
+    resp: Any = getattr(exc, "resp", None)
+    raw = resp.get("retry-after") if resp is not None and hasattr(resp, "get") else None
+    try:
+        seconds = float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+    if seconds is None or seconds < 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER)
 
 
 def _as_json(result: Any) -> Any:

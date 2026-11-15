@@ -1,9 +1,11 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http]>=0.51.0",
+#     "vgi-python[http,duckdb]>=0.51.0",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
+#     "numpy",
+#     "pytz",
 # ]
 # ///
 """Repo-root PEP-723 shim for the google worker.

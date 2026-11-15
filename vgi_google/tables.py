@@ -887,7 +887,9 @@ class GoogleCallFunction(TableFunctionGenerator[_CallArgs, _ScanState]):
             if state.cursor:
                 method_params = {**method_params, "pageToken": state.cursor}
             payload = discovery.execute(request_method(**method_params))
-        except (discovery.GoogleApiError, auth.AuthError, ValueError) as exc:
+        except (discovery.GoogleApiError, auth.AuthError, ValueError, TypeError) as exc:
+            # TypeError: the discovery client's own parameter validation (missing
+            # required / pattern mismatch / unknown parameter).
             raise RuntimeError(f"google_call({a.api}:{a.version} {a.method}) failed: {exc}") from exc
 
         state.started = True
@@ -918,7 +920,9 @@ def _rows_from_payload(payload: Any) -> tuple[list[Any], str | None]:
     """
     next_token = payload.get("nextPageToken") if isinstance(payload, dict) else None
     if isinstance(payload, dict):
-        list_fields = [(k, v) for k, v in payload.items() if isinstance(v, list) and k not in ("etag",)]
+        # ``warnings`` is response metadata (e.g. the Reports usage endpoints'
+        # PARTIAL_DATA_AVAILABLE notices), not a second result list.
+        list_fields = [(k, v) for k, v in payload.items() if isinstance(v, list) and k not in ("etag", "warnings")]
         if len(list_fields) == 1:
             return list(list_fields[0][1]), next_token
     return [payload], next_token

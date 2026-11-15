@@ -42,6 +42,8 @@ from vgi.catalog import Catalog, Schema, View
 
 from vgi_google.auth import SECRET_TYPES
 from vgi_google.tables import COMPOSED_EXAMPLES, TABLE_FUNCTIONS
+from vgi_google.workspace_tables import COMPOSED_EXAMPLES as WORKSPACE_COMPOSED_EXAMPLES
+from vgi_google.workspace_tables import WORKSPACE_CATEGORIES, WORKSPACE_FUNCTIONS
 
 # A genuinely browsable DATA relation: the Google API directory, so an agent can
 # `SELECT * FROM google.main.google_api_directory` — no arguments, no secret — to
@@ -201,6 +203,95 @@ _SCHEMA_DESCRIPTION_MD = (
     "Authentication is service-account-first (an API key suffices for public data), resolved "
     "through the VGI secret provider — credentials are never inlined in SQL. Pagination is handled "
     "automatically and a `count` argument caps total rows. Every function is READ-only."
+)
+
+_WORKSPACE_DESCRIPTION_LLM = (
+    "Google Workspace admin data as typed SQL table functions: Admin SDK Directory objects (users, "
+    "groups, group members, org units, domains, ChromeOS and mobile devices, admin roles and role "
+    "assignments), the Admin SDK Reports audit log (one row per login/admin/drive/token/saml/groups "
+    "event) and daily usage metrics, Alert Center alerts, and per-group Groups Settings. WHERE "
+    "predicates on time ranges, event names, actors, e-mails, org units, roles and admin flags are "
+    "pushed into each API's own filters. Needs a google_service_account secret with domain-wide "
+    "delegation whose subject is an administrator."
+)
+
+_WORKSPACE_DESCRIPTION_MD = (
+    "## Google Workspace admin data\n\n"
+    "The `workspace` schema reads a Google Workspace tenant's administrative data as SQL tables, "
+    "READ-only:\n\n"
+    "- **Directory** — users, groups and members, organizational units, domains, ChromeOS and "
+    "mobile devices, admin roles and role assignments (Admin SDK Directory API).\n"
+    "- **Audit and usage reports** — the audit log flattened to one row per event, and daily "
+    "tenant or per-user usage metrics (Admin SDK Reports API).\n"
+    "- **Alerts and group settings** — Alert Center alerts and Groups Settings.\n\n"
+    "SQL filters on times, event names, actors, e-mails, org units and flags are translated into "
+    "the APIs' own server-side filters; the worker re-applies the exact predicate. Authenticate "
+    "with a `google_service_account` secret using domain-wide delegation (`subject` = an admin's "
+    "e-mail) and authorize each function's read-only scope (see the README)."
+)
+
+_WORKSPACE_SCHEMA = Schema(
+    path=["workspace"],
+    comment="Google Workspace admin data: Directory, Reports audit log and usage, Alert Center, Groups Settings",
+    tags={
+        "vgi.title": "Google Workspace Admin Data",
+        "vgi.keywords": json.dumps(
+            [
+                "google workspace",
+                "admin sdk",
+                "directory",
+                "audit log",
+                "reports api",
+                "alert center",
+                "groups settings",
+                "users",
+                "devices",
+                "domain-wide delegation",
+            ]
+        ),
+        "vgi.doc_llm": _WORKSPACE_DESCRIPTION_LLM,
+        "vgi.doc_md": _WORKSPACE_DESCRIPTION_MD,
+        "vgi.categories": json.dumps(WORKSPACE_CATEGORIES),
+        "domain": "it-administration",
+        "category": "api-integration",
+        "topic": "google-workspace",
+        "vgi.example_queries": json.dumps(
+            [
+                {
+                    "description": "Super administrators who are not enrolled in 2-step verification.",
+                    "sql": (
+                        "SELECT primary_email, last_login_time FROM google.workspace.users() "
+                        "WHERE is_admin AND NOT is_enrolled_in_2sv ORDER BY primary_email"
+                    ),
+                },
+                {
+                    "description": "Failed sign-ins during the first week of November 2026.",
+                    "sql": (
+                        "SELECT time, actor_email, ip_address FROM google.workspace.activities('login') "
+                        "WHERE event_name = 'login_failure' AND time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' "
+                        "AND time < TIMESTAMPTZ '2026-11-08 00:00:00+00' ORDER BY time"
+                    ),
+                },
+                {
+                    "description": "Tenant user count on one day from the usage reports.",
+                    "sql": (
+                        "SELECT int_value AS users FROM google.workspace.usage_reports() "
+                        "WHERE date = DATE '2026-11-10' AND parameter = 'accounts:num_users'"
+                    ),
+                },
+                {
+                    "description": "High-severity Alert Center alerts created since November 2026.",
+                    "sql": (
+                        "SELECT create_time, type, status FROM google.workspace.alerts() "
+                        "WHERE create_time >= TIMESTAMPTZ '2026-11-01 00:00:00+00' AND severity = 'HIGH' "
+                        "ORDER BY create_time DESC"
+                    ),
+                },
+                *WORKSPACE_COMPOSED_EXAMPLES,
+            ]
+        ),
+    },
+    functions=list(WORKSPACE_FUNCTIONS),
 )
 
 _GOOGLE_CATALOG = Catalog(
@@ -370,6 +461,60 @@ _GOOGLE_CATALOG = Catalog(
                         "'users.labels.list', userId 'me'). (Requires a configured Google secret.)"
                     ),
                 },
+                # google.workspace tasks: credential-gated (a Workspace admin service
+                # account with domain-wide delegation); graders in vgi-agent-tests.yaml.
+                {
+                    "name": "workspace_admins_without_2sv",
+                    "prompt": "List the primary_email of Google Workspace super administrators who are not enrolled in 2-step verification, ordered by primary_email. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_largest_groups",
+                    "prompt": "Return the email and direct_members_count of the 5 Google Workspace groups with the most direct members, largest first (ties by email). (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_group_owners",
+                    "prompt": "List the email of every OWNER of the Google group 'eng@example.com', ordered by email. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_org_unit_tree",
+                    "prompt": "List every organizational unit's org_unit_path in the Workspace tenant, ordered by org_unit_path. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_unverified_domains",
+                    "prompt": "Which of the Workspace tenant's domains are not verified? Return domain_name ordered by domain_name. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_custom_roles",
+                    "prompt": "List the role_name of the Workspace admin roles that are not system roles, ordered by role_name. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_role_holders",
+                    "prompt": "For every Workspace admin role assignment, return the role_name and the assignee's primary_email (join role assignments to roles on role_id and to users on users.id = assigned_to), ordered by role_name then primary_email. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_chromeos_expired",
+                    "prompt": "List the serial_number of managed ChromeOS devices whose auto_update_through is before 2026-11-15 00:00 UTC, ordered by serial_number. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_mobile_stale",
+                    "prompt": "List the resource_id of managed mobile devices whose last_sync is before 2026-10-01 00:00 UTC, ordered by resource_id. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_failed_logins_week",
+                    "prompt": "From the Workspace 'login' audit log, return time and actor_email of every login_failure event between 2026-11-01 00:00 UTC (inclusive) and 2026-11-08 00:00 UTC (exclusive), ordered by time. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_user_count_on_day",
+                    "prompt": "Using the Workspace customer usage report for 2026-11-10, return the int_value of the 'accounts:num_users' metric. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_high_alerts",
+                    "prompt": "List the alert_id and type of Alert Center alerts with severity 'HIGH' created on or after 2026-11-01 00:00 UTC, ordered by alert_id. (Requires a Workspace admin credential.)",
+                },
+                {
+                    "name": "workspace_group_allows_outsiders",
+                    "prompt": "Does the Google group 'eng@example.com' allow external members? Return who_can_join and allow_external_members from its group settings. (Requires a Workspace admin credential.)",
+                },
             ]
         ),
     },
@@ -480,6 +625,7 @@ _GOOGLE_CATALOG = Catalog(
             functions=list(TABLE_FUNCTIONS),
             views=[_API_DIRECTORY_VIEW],
         ),
+        _WORKSPACE_SCHEMA,
     ],
 )
 

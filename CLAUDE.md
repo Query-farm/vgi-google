@@ -15,6 +15,12 @@ intact.
 - The SQL surface is seven **table functions** in the `google` catalog assembled
   in `google_worker.py`: `google_sheet`, `google_drive`, `google_calendar`,
   `google_youtube`, `google_call`, `google_apis`, `google_methods`.
+- A second schema, `workspace`, holds thirteen Google Workspace admin table
+  functions (`vgi_google/workspace.py` adapters + `vgi_google/workspace_tables.py`
+  functions): Admin SDK Directory (users, groups, group_members, org_units,
+  domains, roles, role_assignments, chromeos_devices, mobile_devices), Reports
+  (activities, usage_reports), Alert Center (alerts) and Groups Settings
+  (group_settings).
 - v1 is **READ only**. Sheets write and the OAuth-user flow are documented
   follow-ups, NOT built.
 
@@ -85,6 +91,24 @@ Service-account-first, via `params.secrets` only — never inline. Secret types:
 to narrow) and `google_api_key`. Each adapter declares least-privilege `scopes`
 (documented in the README table). Env hatches `VGI_GOOGLE_SERVICE_ACCOUNT_FILE` /
 `VGI_GOOGLE_API_KEY` are for tests/local only.
+
+## Workspace functions: filter pushdown
+
+- Each `google.workspace` function sets `filter_pushdown` + `auto_apply_filters`.
+  `initial_state` deserializes the pushed filters, the adapter's
+  `pushdown(filters) -> dict` translates them into API parameters, and the dict is
+  stored as JSON in `_WorkspaceState.pushed_json` (so it survives HTTP). The
+  framework re-applies the exact predicate, so a translation must only ever be
+  a SUPERSET of the SQL predicate (widen bounds; drop what does not map).
+- Pushdown needs a DuckDB engine inside the worker: vgi-python's `duckdb` extra
+  plus `numpy` and `pytz` (the extra lacks both as of 0.51.0) are runtime deps.
+- `_run_tick` must emit or finish every tick, so it skips empty pages that still
+  have a successor (usage-report days with no data inside a range).
+- `usage_reports` uses a composite cursor `"<day index>|<pageToken>"`.
+- Tests replay Google's REAL discovery docs (`tests/fixtures/discovery`, trimmed
+  by `scripts/trim_discovery.py`) against `tests/mock_workspace.py`, which applies
+  the server-side filters and echoes each request into activity `etag`s so the SQL
+  suite can assert what was pushed.
 
 ## Adding a curated adapter
 
