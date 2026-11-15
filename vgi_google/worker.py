@@ -136,15 +136,16 @@ def _maybe_install_mock() -> None:
 
 
 _CATALOG_DESCRIPTION_LLM = (
-    "Query Google's REST APIs from SQL as table functions. Curated READ adapters cover the "
-    "high-demand surfaces: read a Google Sheets range as rows (google_sheet), list/search Google "
-    "Drive files (google_drive), list Google Calendar events (google_calendar), and search YouTube "
-    "videos with view/like/comment counts (google_youtube). A generic escape hatch (google_call) "
-    "invokes any Google API method and returns its JSON rows, while google_apis and google_methods "
-    "let you discover which APIs and methods are reachable. Use it to pull spreadsheet data, file "
-    "metadata, calendar events, and video statistics into SQL, or to reach any other Google REST "
-    "API. Auth is service-account-first (API key for public APIs) via the VGI secret provider; "
-    "the worker is READ-only and quotas/billing live in Google's APIs."
+    "Query Google's REST APIs from SQL as table functions. Curated READ adapters give typed columns "
+    "for the high-demand surfaces (Sheets ranges, Drive file metadata, Calendar events, YouTube "
+    "video statistics); a generic escape hatch invokes any Google API method by name and returns "
+    "its JSON response as rows; and discovery functions, backed by Google's public API Discovery "
+    "Service, list which APIs and methods are reachable so you can find a method and its "
+    "parameters before calling it. Use it to pull spreadsheet data, file metadata, calendar events "
+    "and video statistics into SQL, or to reach any other Google REST API. Auth is "
+    "service-account-first (API key for public APIs) via the VGI secret provider; discovery needs "
+    "no credential. Pagination is automatic and a count argument caps total rows. The worker is "
+    "READ-only and quotas/billing live in Google's APIs."
 )
 
 _CATALOG_DESCRIPTION_MD = (
@@ -181,10 +182,10 @@ _CATALOG_DESCRIPTION_MD = (
 )
 
 _SCHEMA_DESCRIPTION_LLM = (
-    "Google API table functions: read Sheets ranges (google_sheet), list/search Drive files "
-    "(google_drive), list Calendar events (google_calendar), search YouTube videos (google_youtube), "
-    "call any Google API method (google_call), and discover reachable APIs/methods (google_apis, "
-    "google_methods)."
+    "Google API table functions in three kinds: curated typed adapters for Sheets, Drive, Calendar "
+    "and YouTube; a generic call that reaches any Google REST method; and discovery of the "
+    "reachable APIs and their methods (also browsable as a directory view). Start from discovery "
+    "when the curated adapters do not cover the API you need."
 )
 
 _SCHEMA_DESCRIPTION_MD = (
