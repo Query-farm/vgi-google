@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http,duckdb]>=0.51.0",
+#     "vgi-python[http,duckdb]>=0.52.0",
 #     "google-api-python-client>=2.100",
 #     "google-auth>=2.20",
 #     "numpy",
