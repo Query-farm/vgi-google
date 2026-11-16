@@ -1,57 +1,45 @@
-# vgi-google worker -- dev and test targets.
+# vgi-google — dev and test targets. `make help` lists them.
 #
-# Usage:
-#   make test        # unit (pytest) + SQL end-to-end (haybarn-unittest, mock transport)
-#   make test-unit   # pytest only (fixture parsers + mock E2E, no live network)
-#   make test-sql    # SQL end-to-end only (haybarn glob, driven against the mock transport)
-#   make lint        # ruff
-#   make typecheck   # mypy
-#
-# The SQL suite drives the worker as a real subprocess over stdio: haybarn-unittest
-# ATTACHes `${VGI_GOOGLE_WORKER}`, then runs the .test files in test/sql/. The
-# worker is launched with VGI_GOOGLE_MOCK=1 so its adapters build from static
-# discovery docs and are served canned, paginated responses (tests/mock_google.py),
-# so NOTHING in the CI gate touches a live Google API.
+# SQL tests (test/sql/*.test) run through the published haybarn-unittest with the
+# signed community `vgi` extension, over each transport (ci/run-integration.sh):
+#   stdio   DuckDB spawns the worker per connection
+#   launch  DuckDB starts the worker once on a unix socket and pools connections
+#   http    the worker serves `--http`, as in Docker deploys
+# One transport only: make test-sql TRANSPORTS=launch
 
-# Worker stdio command (overridable). Run from the synced project venv (deps
-# resolved from the lockfile), matching CI's WORKER_CMD. Plain `.venv/bin/python`
-# ignores the PEP-723 header, so the worker uses the locked, current SDK rather
-# than a separately-cached `uv run` script environment.
-WORKER_STDIO   ?= .venv/bin/python google_worker.py
+HAYBARN_VERSION  ?= 2.0.0rc11
+TOOLS            := $(CURDIR)/.tools
+HAYBARN_UNITTEST := $(TOOLS)/bin/haybarn-unittest
+WORKER           := $(CURDIR)/ci/worker
+TRANSPORTS       ?= stdio launch http
 
-# haybarn-unittest: the DuckDB sqllogictest runner (uv tool install --prerelease allow 'haybarn-unittest>=2.0.0rc11,<2.1').
-# haybarn 2.0 is required: its community `vgi` extension is the one that speaks the
-# worker's VGI protocol (vgi.v3 / 3.3). The runner is invoked with --keep-home so
-# it sees the extensions installed under the real $HOME (haybarn-unittest 2.0 isolates it).
-HAYBARN        ?= haybarn-unittest
-TEST_DIR        = .
-TEST_PATTERN    = test/sql/*
+.DEFAULT_GOAL := help
+.PHONY: help build tools test test-unit test-sql lint check
 
-.PHONY: test test-unit test-sql pytest lint typecheck
+help: ## List the targets
+	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  %-10s %s\n",$$1,$$2}' $(MAKEFILE_LIST)
 
-test: test-unit test-sql
+build: ## Install the worker and dev tools into .venv
+	uv sync --locked --all-extras
 
-test-unit: pytest
+tools: ## Install the pinned SQL test runner into .tools
+	@test -x $(HAYBARN_UNITTEST) || { uv venv -q $(TOOLS) && uv pip install -q -p $(TOOLS) haybarn-unittest==$(HAYBARN_VERSION); }
 
-pytest:
-	uv run --no-sync pytest -q
+test-unit: build ## Unit tests (pytest)
+	uv run pytest -q
 
-# End-to-end SQL: a tiny Python launcher enables the mock transport (and a temp
-# discovery dir for the discovery helpers), then runs the haybarn glob with the
-# worker command exported.
-test-sql:
-	@command -v $(HAYBARN) >/dev/null 2>&1 || { \
-		echo "ERROR: $(HAYBARN) not found. Install it with:" >&2; \
-		echo "  uv tool install --prerelease allow 'haybarn-unittest>=2.0.0rc11,<2.1'" >&2; \
-		echo "  (then ensure ~/.local/bin is on PATH)" >&2; \
-		exit 1; \
-	}
-	VGI_GOOGLE_WORKER="$(WORKER_STDIO)" \
-	HAYBARN="$(HAYBARN)" TEST_DIR="$(TEST_DIR)" TEST_PATTERN="$(TEST_PATTERN)" \
-		uv run --no-sync python scripts/run_sql_e2e.py
+test-sql: build tools ## SQL tests through DuckDB over stdio, launch and http
+	@set -e; for t in $(TRANSPORTS); do \
+	  echo "== test/sql over $$t"; \
+	  WORKER=$(WORKER) HAYBARN_UNITTEST=$(HAYBARN_UNITTEST) TRANSPORT=$$t PYTHON="$(CURDIR)/.venv/bin/python" ci/run-integration.sh; \
+	done
 
-lint:
-	uv run --no-sync ruff check .
+test: test-unit test-sql ## Unit + SQL tests
 
-typecheck:
-	uv run --no-sync mypy vgi_google
+lint: build ## Static checks (mirrors CI's lint job)
+	uv run ruff format --check .
+	uv run ruff check .
+	uv run mypy vgi_google google_worker.py serve.py
+	uvx pydoclint --config pyproject.toml vgi_google google_worker.py serve.py
+
+check: lint test ## Everything CI runs

@@ -2,7 +2,7 @@
 # description: google_* table functions E2E against the canned mock transport
 # group: [vgi_google]
 #
-# Driven by scripts/run_sql_e2e.py, which launches the worker with
+# Driven by ci/run-integration.sh, which launches the worker with
 # VGI_GOOGLE_MOCK=1 (canned, paginated responses; no live Google, no creds) and
 # a temp VGI_GOOGLE_DISCOVERY_DIR for the discovery helpers. The mock serves a
 # deterministic 5 items per paged query, ONE per page, so a count larger than a

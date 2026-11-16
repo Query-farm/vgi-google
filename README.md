@@ -320,9 +320,8 @@ Apache-2.0) plus `vgi-python`.
 ```sh
 make test        # pytest (parsers + mock E2E) + haybarn SQL E2E (mock transport)
 make test-unit   # pytest only
-make test-sql    # haybarn SQL E2E only
-make lint        # ruff
-make typecheck   # mypy
+make test-sql    # haybarn SQL E2E only (stdio, launch, http)
+make lint        # ruff + mypy + pydoclint
 ```
 
 There is **no live Google in the CI gate**. Tests use

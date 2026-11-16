@@ -127,10 +127,10 @@ to narrow) and `google_api_key`. Each adapter declares least-privilege `scopes`
   (`test_auth.py`), discovery (`test_discovery.py`), mock E2E (`test_mock_e2e.py`,
   incl. the pageToken round-trip + single-worker-pin proofs).
 - `make test-sql` — the real worker subprocess under DuckDB via `haybarn-unittest`,
-  launched with `VGI_GOOGLE_MOCK=1` by `scripts/run_sql_e2e.py`. The `.test` file
+  launched with `VGI_GOOGLE_MOCK=1` by `ci/run-integration.sh`. The `.test` file
   uses `LOAD vgi;` (NEVER `require vgi`), `require-env VGI_GOOGLE_WORKER`, ATTACHes
   `${VGI_GOOGLE_WORKER}`, and globs `test/sql/*`.
-- `make lint` (ruff) + `make typecheck` (mypy `vgi_google`) must be clean.
+- `make lint` (ruff + mypy + pydoclint) must be clean.
 - Live smoke (`tests/test_live_smoke.py`) is GATED by `VGI_GOOGLE_LIVE=1`, not in
   the CI gate.
 

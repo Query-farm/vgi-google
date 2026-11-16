@@ -1,62 +1,86 @@
 #!/usr/bin/env bash
-# Copyright 2026 Query Farm LLC - https://query.farm
+# Adapted from vgi-starters (python/ci/run-integration.sh).
 #
-# Run this repo's sqllogictest suite (test/sql/*.test) against the vgi-google
-# VGI worker, using a prebuilt standalone `haybarn-unittest` and the signed
-# community `vgi` extension — no C++ build from source. See ci/README.md.
+# Run test/sql/*.test through DuckDB (the haybarn-unittest sqllogictest runner)
+# against this worker, over one transport.
 #
-# OFFLINE MOCKING (all transports): the worker is run with VGI_GOOGLE_MOCK=1 so
-# its adapters build from static discovery docs and are served canned, paginated
-# responses (tests/mock_google.py). A temp dir of static discovery artifacts is
-# exported via VGI_GOOGLE_DISCOVERY_DIR so google_apis / google_methods also run
-# offline — nothing touches a live Google API. These two env exports are set by
-# THIS script, so they are inherited by the worker process for EVERY transport
-# (subprocess, http, unix) — no separate mock server is needed.
-#
-# The SAME suite is exercised over three VGI transports, selected by $TRANSPORT.
-# The vgi extension picks the transport from the LOCATION string the .test files
-# ATTACH (`${VGI_GOOGLE_WORKER}`):
-#
-#   subprocess : a bare stdio command (the worker) — the extension spawns the
-#                worker per query, Arrow IPC over stdin/stdout. Default.
-#   http       : the worker is started out-of-band in `--http` mode on an auto
-#                port; LOCATION becomes `http://127.0.0.1:<port>`.
-#   unix       : the worker is started out-of-band on an AF_UNIX socket;
-#                LOCATION becomes `unix://<sock>`.
+#   WORKER=/abs/path/to/worker-executable TRANSPORT=stdio ci/run-integration.sh
 #
 # Required environment:
-#   HAYBARN_UNITTEST     path to the haybarn-unittest binary
-#   TRANSPORT            subprocess | http | unix (default: subprocess)
-#   WORKER_CMD           the stdio command that runs the worker. Used directly as
-#                        the LOCATION for subprocess, and as the process booted
-#                        for http/unix. Defaults to
-#                        `uv run --python 3.13 <repo>/google_worker.py`.
+#   WORKER            absolute path to an executable that serves the worker:
+#                     no arguments = stdio; `--http --port 0` = HTTP, printing
+#                     `PORT:<n>` on stdout once listening.
 # Optional:
-#   STAGE                scratch dir for the preprocessed test tree (default: mktemp)
+#   TRANSPORT         stdio | launch | http                        (default: stdio)
+#   HAYBARN_UNITTEST  path to haybarn-unittest   (default: the one on PATH)
+#   PYTHON            command for helper scripts, may contain spaces (default: python3)
+#   MIN_EXECUTED      fail if fewer test cases ran (default: 1)
+#   EXPECTED_SKIP_REASONS  newline-separated skip reasons that are allowed,
+#                     e.g. "require-env STARTER_LIVE". Any other skip fails.
+#   WARMUP_TIMEOUT    seconds allowed for the extension install (default: 300)
+#   KEEP_STAGE=1      keep the staged test tree for debugging
+#
+# Transports:
+#   stdio   DuckDB spawns the worker and talks over stdin/stdout (the default).
+#   launch  DuckDB starts the worker once on an AF_UNIX socket and pools
+#           connections (`LOCATION 'launch:/path'`); best for slow-starting
+#           runtimes such as the JVM.
+#   http    the worker runs as an HTTP server (`--http`), as in Docker deploys.
+#
+# The .test files ATTACH `${VGI_GOOGLE_WORKER}`; this script sets it per transport.
+#
+# Why the extra checks: the sqllogictest runner turns some errors into silent
+# SKIPs (anything mentioning "HTTP" without --test-config) and exits 0 when no
+# test matched. Both would make a broken lane look green, so this script passes
+# a config that disables error-skipping and fails on any unexpected skip.
 set -euo pipefail
 
-: "${HAYBARN_UNITTEST:?path to the haybarn-unittest binary}"
+: "${WORKER:?absolute path to the worker executable}"
+TRANSPORT="${TRANSPORT:-stdio}"
+HAYBARN_UNITTEST="${HAYBARN_UNITTEST:-$(command -v haybarn-unittest || true)}"
+PYTHON="${PYTHON:-python3}"
+MIN_EXECUTED="${MIN_EXECUTED:-1}"
+[ -n "$HAYBARN_UNITTEST" ] || { echo "::error::haybarn-unittest not found (make tools)"; exit 1; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-STAGE="${STAGE:-$(mktemp -d)}"
-TRANSPORT="${TRANSPORT:-subprocess}"
-WORKER_CMD="${WORKER_CMD:-uv run --python 3.13 $REPO/google_worker.py}"
+STAGE="$(mktemp -d)"
+PIDS=()
+cleanup() {
+  for p in ${PIDS[@]+"${PIDS[@]}"}; do kill "$p" 2>/dev/null || true; done
+  [ "${KEEP_STAGE:-0}" = "1" ] && echo "stage kept at $STAGE" || rm -rf "$STAGE"
+}
+trap cleanup EXIT
 
-echo "Staging preprocessed tests into $STAGE ..."
-mkdir -p "$STAGE/test/sql"
-for f in "$REPO"/test/sql/*.test; do
-  awk -f "$HERE/preprocess-require.awk" "$f" > "$STAGE/test/sql/$(basename "$f")"
-done
+# start_server <log> <cmd...> — run a server that prints PORT:<n>; sets PORT.
+PORT=""
+start_server() {
+  local log="$1"; shift
+  # Create the log before backgrounding: the child opens its redirect only
+  # once it is scheduled, and the poll below would otherwise read a missing
+  # file, which under set -e -o pipefail kills the whole run.
+  : > "$log"
+  "$@" >"$log" 2>&1 &
+  local pid=$!
+  PIDS+=("$pid")
+  for _ in $(seq 1 120); do
+    kill -0 "$pid" 2>/dev/null || { echo "::error::'$*' exited early:"; cat "$log"; return 1; }
+    PORT="$(sed -n 's/^PORT:\([0-9][0-9]*\).*/\1/p' "$log" | head -1)"
+    [ -n "$PORT" ] && return 0
+    sleep 0.5
+  done
+  echo "::error::'$*' never printed PORT:<n>"; cat "$log"; return 1
+}
 
-# ---------------------------------------------------------------------------
-# Build the static discovery dir the offline discovery helpers read (the same
-# artifacts scripts/run_sql_e2e.py writes), from the repo root so
-# `tests.mock_google` imports. Exported (with VGI_GOOGLE_MOCK=1) for ALL
-# transports — the worker we boot below inherits both.
-# ---------------------------------------------------------------------------
-DISCO="$(mktemp -d)"
-( cd "$REPO" && DISCO="$DISCO" uv run --no-sync python - <<'PY'
+# Offline mocking (all transports): the worker runs with VGI_GOOGLE_MOCK=1, so
+# its adapters build from static discovery docs and are served canned, paginated
+# responses (tests/mock_google.py). A temp dir of static discovery artifacts is
+# exported via VGI_GOOGLE_DISCOVERY_DIR so google_apis / google_methods also run
+# offline. Both are inherited by the worker for every transport; nothing touches
+# a live Google API.
+DISCO="$STAGE/discovery"
+mkdir -p "$DISCO"
+( cd "$REPO" && DISCO="$DISCO" $PYTHON - <<'PYEOF'
 import json, os
 from pathlib import Path
 from tests.mock_google import DRIVE_DOC
@@ -71,185 +95,110 @@ apis_list = {
 d = Path(os.environ["DISCO"])
 (d / "apis.list.json").write_text(json.dumps(apis_list))
 (d / "drive.v3.json").write_text(json.dumps(DRIVE_DOC))
-PY
+PYEOF
 )
 export VGI_GOOGLE_MOCK=1
 export VGI_GOOGLE_DISCOVERY_DIR="$DISCO"
 
-# ---------------------------------------------------------------------------
-# Per-transport: resolve VGI_GOOGLE_WORKER (the LOCATION) and, for the
-# out-of-band transports, boot the worker server + arrange trap-cleanup.
-# ---------------------------------------------------------------------------
-SERVER_PID=""
-SOCK=""
-PORT_FILE=""
-
-cleanup() {
-  # Capture the real exit status FIRST: an EXIT trap whose last command returns
-  # non-zero (e.g. a short-circuited `[[ -n "" ]] && …` on the subprocess/unix
-  # legs where nothing needs cleaning) would otherwise become the script's exit
-  # status under `set -e` and fail an already-passing run. Then clean BOTH the
-  # discovery dir AND any out-of-band worker.
-  local rc=$?
-  if [[ -n "$SERVER_PID" ]]; then
-    kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
-  fi
-  if [[ -n "$SOCK" ]]; then rm -f "$SOCK"; fi
-  if [[ -n "$PORT_FILE" ]]; then rm -f "$PORT_FILE"; fi
-  rm -rf "$DISCO"
-  return "$rc"
-}
-trap cleanup EXIT
-
+HTTP=0
+WORKER_PID=""
 case "$TRANSPORT" in
-  subprocess)
-    export VGI_GOOGLE_WORKER="$WORKER_CMD"
-    ;;
-
+  stdio)  export VGI_GOOGLE_WORKER="$WORKER" ;;
+  launch) export VGI_GOOGLE_WORKER="launch:$WORKER" ;;
   http)
-    # The vgi extension's HTTP transport is implemented on top of DuckDB's
-    # httpfs extension, so an `http://` ATTACH binds with
-    #   "Binder Error: VGI HTTP transport requires the httpfs extension."
-    # unless httpfs is loaded first. (The haybarn sqllogictest runner's default
-    # skip list swallows any error containing "HTTP", so without this the whole
-    # suite would silently SKIP rather than fail — a fake pass.) The .test files
-    # are transport-agnostic; inject a signed `INSTALL httpfs FROM core; LOAD
-    # httpfs;` right after the awk-injected `LOAD vgi;` in each staged file, so
-    # httpfs is present only when we actually run over HTTP.
-    echo "Injecting httpfs load into staged tests (HTTP transport needs it) ..."
-    for sf in "$STAGE"/test/sql/*.test; do
-      awk '
-        { print }
-        /^LOAD[ \t]+vgi[ \t]*;[ \t]*$/ && !done {
-          print "";
-          print "statement ok";
-          print "INSTALL httpfs FROM core;";
-          print "";
-          print "statement ok";
-          print "LOAD httpfs;";
-          done = 1
-        }
-      ' "$sf" > "$sf.tmp" && mv "$sf.tmp" "$sf"
-    done
-
-    # Boot the worker in HTTP mode on an auto-selected port. GoogleWorker.main()
-    # writes the chosen port to --port-file atomically (tmp + rename), so we
-    # watch for the file to appear rather than parsing stdout. HTTP mode needs
-    # the `http` extra (waitress); CI runs `uv sync --extra http` and the PEP 723
-    # headers list `vgi-python[http]`. The worker inherits VGI_GOOGLE_MOCK=1 +
-    # VGI_GOOGLE_DISCOVERY_DIR exported above, so it serves the canned offline
-    # responses for the life of the process.
-    PORT_FILE="$(mktemp -u "${TMPDIR:-/tmp}/google-port.XXXXXX")"
-    LOG_FILE="${TMPDIR:-/tmp}/google-http-server.log"
-    echo "Starting HTTP worker: $WORKER_CMD --http --port 0 --port-file $PORT_FILE"
-    # cwd = repo root so the worker resolves tests.mock_google + vgi_google.
-    # shellcheck disable=SC2086
-    ( cd "$REPO" && exec $WORKER_CMD --http --port 0 --port-file "$PORT_FILE" ) > "$LOG_FILE" 2>&1 &
-    SERVER_PID=$!
-
-    PORT=""
-    for _ in $(seq 1 240); do
-      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "ERROR: HTTP worker exited before reporting a port. Log:" >&2
-        cat "$LOG_FILE" >&2
-        exit 1
-      fi
-      if [[ -s "$PORT_FILE" ]]; then
-        PORT="$(tr -d '[:space:]' < "$PORT_FILE")"
-        [[ -n "$PORT" ]] && break
-      fi
-      sleep 0.5
-    done
-    if [[ -z "$PORT" ]]; then
-      echo "ERROR: timed out waiting for HTTP worker port-file. Log:" >&2
-      cat "$LOG_FILE" >&2
-      exit 1
-    fi
-    echo "HTTP worker ready on port $PORT (pid $SERVER_PID)"
+    HTTP=1
+    start_server "$STAGE/worker.log" "$WORKER" --http --port 0
+    WORKER_PID="${PIDS[${#PIDS[@]}-1]}"
     export VGI_GOOGLE_WORKER="http://127.0.0.1:$PORT"
     ;;
-
-  unix)
-    # Boot the worker bound to an AF_UNIX socket. GoogleWorker.main() prints
-    # `UNIX:<abs-path>` once bound; we poll for the socket file to appear. The
-    # worker inherits VGI_GOOGLE_MOCK=1 + VGI_GOOGLE_DISCOVERY_DIR exported above.
-    SOCK="${TMPDIR:-/tmp}/google-$$.sock"
-    rm -f "$SOCK"
-    LOG_FILE="${TMPDIR:-/tmp}/google-unix-server.log"
-    echo "Starting unix worker: $WORKER_CMD --unix $SOCK"
-    # shellcheck disable=SC2086
-    ( cd "$REPO" && exec $WORKER_CMD --unix "$SOCK" ) > "$LOG_FILE" 2>&1 &
-    SERVER_PID=$!
-
-    READY=""
-    for _ in $(seq 1 240); do
-      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "ERROR: unix worker exited before binding the socket. Log:" >&2
-        cat "$LOG_FILE" >&2
-        exit 1
-      fi
-      if [[ -S "$SOCK" ]]; then
-        READY=1
-        break
-      fi
-      sleep 0.5
-    done
-    if [[ -z "$READY" ]]; then
-      echo "ERROR: timed out waiting for unix worker socket. Log:" >&2
-      cat "$LOG_FILE" >&2
-      exit 1
-    fi
-    echo "unix worker ready on $SOCK (pid $SERVER_PID)"
-    export VGI_GOOGLE_WORKER="unix://$SOCK"
-    ;;
-
-  *)
-    echo "ERROR: unknown TRANSPORT '$TRANSPORT' (want subprocess|http|unix)" >&2
-    exit 2
-    ;;
+  *) echo "::error::unknown TRANSPORT=$TRANSPORT (expected stdio|launch|http)"; exit 1 ;;
 esac
 
-cd "$STAGE"
+# Stage the tests, rewriting `require vgi` into a signed INSTALL + LOAD (the
+# standalone runner links no extensions) and loading httpfs for HTTP workers.
+# This repo's tests `LOAD vgi;` directly; httpfs is loaded right after it.
+mkdir -p "$STAGE/test/sql"
+TEST_FILES=("$REPO"/test/sql/*.test)
+for f in "${TEST_FILES[@]}"; do
+  awk -v http="$HTTP" -v inject="0" '
+    /^require[ \t]+vgi[ \t]*$/ {
+      print "statement ok"; print "LOAD vgi;"; print ""
+      if (http == 1) { print "statement ok"; print "LOAD httpfs;"; print "" }
+      loaded = 1
+      next
+    }
+    /^[ \t]*LOAD[ \t]+vgi[ \t]*;[ \t]*$/ {
+      print
+      if (http == 1 && !loaded) { print ""; print "statement ok"; print "LOAD httpfs;" }
+      loaded = 1
+      next
+    }
+    inject == 1 && !loaded && /^(statement|query)[ \t]/ {
+      print "statement ok"; print "LOAD vgi;"; print ""
+      if (http == 1) { print "statement ok"; print "LOAD httpfs;"; print "" }
+      loaded = 1
+    }
+    { print }' "$f" > "$STAGE/test/sql/$(basename "$f")"
+done
 
-# Warm the extension cache once: vgi from the signed community channel. A miss
-# here is only a warning — the per-test INSTALL/LOAD (injected by
-# preprocess-require.awk) is what actually gates each file.
-echo "Warming the extension cache (vgi from community) ..."
-mkdir -p "$STAGE/test"
+# Install the extensions once, refreshing any stale cached copy of vgi.
 cat > "$STAGE/test/_warm.test" <<'EOF'
-# name: test/_warm.test
-# group: [warm]
 statement ok
-INSTALL vgi FROM community;
+FORCE INSTALL vgi FROM community;
+
+statement ok
+INSTALL httpfs FROM core;
+
+statement ok
+INSTALL json FROM core;
 EOF
-"$HAYBARN_UNITTEST" --keep-home "test/_warm.test" >/dev/null 2>&1 || echo "::warning::extension warm step did not fully succeed"
+# Bounded: a stalled extension download would otherwise hang the lane until the
+# job timeout. WARMUP_TIMEOUT is in seconds.
+"$HAYBARN_UNITTEST" --keep-home --test-dir "$STAGE" "test/_warm.test" >/dev/null 2>&1 &
+warm_pid=$!
+warm_deadline=$((SECONDS + ${WARMUP_TIMEOUT:-300}))
+while kill -0 "$warm_pid" 2>/dev/null && [ "$SECONDS" -lt "$warm_deadline" ]; do sleep 1; done
+if kill -0 "$warm_pid" 2>/dev/null; then
+  kill "$warm_pid" 2>/dev/null || true
+  wait "$warm_pid" 2>/dev/null || true
+  echo "::warning::extension warm-up timed out after ${WARMUP_TIMEOUT:-300}s (stalled download?)"
+elif ! wait "$warm_pid"; then
+  echo "::warning::extension warm-up did not fully succeed"
+fi
 rm -f "$STAGE/test/_warm.test"
 
-# Run the whole suite in one invocation, capturing the runner's native
-# sqllogictest report so we can both stream it AND assert on the summary line.
-echo "Running suite (transport: $TRANSPORT, worker: $VGI_GOOGLE_WORKER) ..."
-RUN_LOG="$STAGE/run.log"
-set +e
-"$HAYBARN_UNITTEST" --keep-home "test/sql/*" 2>&1 | tee "$RUN_LOG"
-status=${PIPESTATUS[0]}
-set -e
+cat > "$STAGE/no_error_skip.json" <<'EOF'
+{"skip_error_messages": ["__vgi_starter_never_matches__"]}
+EOF
 
-# SILENT-SKIP GUARD (critical for the http leg). DuckDB's sqllogictest runner
-# auto-SKIPS (exit 0!) any test whose error message contains "HTTP" or "Unable
-# to connect" — so a broken http setup reports "All tests were skipped" and the
-# job goes GREEN while testing nothing. Fail the leg unless the runner reports a
-# real pass with N>0 assertions and reported zero skips.
-if [[ $status -ne 0 ]]; then
-  echo "ERROR: haybarn-unittest exited $status" >&2
-  exit "$status"
+echo "Running test/sql over $TRANSPORT (worker: $VGI_GOOGLE_WORKER)"
+LOG="$STAGE/unittest.log"
+rc=0
+( cd "$STAGE" && "$HAYBARN_UNITTEST" --keep-home --test-dir "$STAGE" \
+    --test-config "$STAGE/no_error_skip.json" "test/sql/*" ) 2>&1 | tee "$LOG" && rc=0 || rc="${PIPESTATUS[0]}"
+
+if grep -q 'No test cases matched\|No tests ran' "$LOG"; then
+  echo "::error::no test cases matched; the staging is wrong"; exit 1
 fi
-if grep -Eqi 'were skipped|tests were skipped' "$RUN_LOG"; then
-  echo "ERROR: tests were SKIPPED (likely a masked $TRANSPORT transport error — see above)." >&2
-  exit 1
+total="$(sed -n 's/^\[[0-9]*\/\([0-9]*\)\].*/\1/p' "$LOG" | tail -1)"
+total="${total:-0}"
+skips="$(awk '/^Skipped tests for the following reasons:/{b=1;next} b&&/^[[:space:]]*$/{b=0} b&&match($0,/: [0-9]+[[:space:]]*$/){print substr($0,1,RSTART-1) "\t" substr($0,RSTART+2)+0}' "$LOG")"
+skipped=0
+while IFS=$'\t' read -r reason n; do
+  [ -n "$reason" ] || continue
+  skipped=$((skipped + n))
+  if ! printf '%s\n' "${EXPECTED_SKIP_REASONS:-}" | grep -qxF "$reason"; then
+    echo "::error::unexpected skip: '$reason'. A test file silently stopped running;" \
+         "fix the gate or add it to EXPECTED_SKIP_REASONS."
+    rc=1
+  fi
+done <<< "$skips"
+executed=$((total - skipped))
+echo "executed $executed of $total test files over $TRANSPORT ($skipped skipped)"
+if [ "$executed" -lt "$MIN_EXECUTED" ]; then
+  echo "::error::only $executed test files ran (MIN_EXECUTED=$MIN_EXECUTED)"; rc=1
 fi
-if ! grep -Eq 'All tests passed \([1-9][0-9]* assertions' "$RUN_LOG"; then
-  echo "ERROR: did not find an 'All tests passed (N assertions ...)' summary with N>0." >&2
-  exit 1
+if [ "$HTTP" = "1" ] && ! kill -0 "$WORKER_PID" 2>/dev/null; then
+  echo "::error::the HTTP worker died during the run:"; cat "$STAGE/worker.log"; rc=1
 fi
-echo "Suite GREEN over transport: $TRANSPORT"
+exit "$rc"

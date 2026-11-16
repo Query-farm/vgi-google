@@ -2,7 +2,7 @@
 # description: google.workspace.* (Admin SDK Directory/Reports, Alert Center, Groups Settings) E2E
 # group: [vgi_google]
 #
-# Driven by scripts/run_sql_e2e.py with VGI_GOOGLE_MOCK=1. The worker builds its
+# Driven by ci/run-integration.sh with VGI_GOOGLE_MOCK=1. The worker builds its
 # clients from Google's REAL discovery documents (tests/fixtures/discovery) and
 # is served by tests/mock_workspace.py, which applies the server-side filters the
 # adapters push down. Every activity's `etag` echoes the request (user key +

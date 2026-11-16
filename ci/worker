@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# The worker as one executable path, for the SQL tests (a `launch:` LOCATION
+# cannot carry arguments). Runs the root script from the synced .venv so the
+# repo root is on sys.path: VGI_GOOGLE_MOCK=1 imports tests.mock_google.
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$REPO/.venv/bin/python" "$REPO/google_worker.py" "$@"
