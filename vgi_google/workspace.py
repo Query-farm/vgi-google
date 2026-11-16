@@ -62,7 +62,7 @@ def _discrete(filters: Any, column: str) -> list[Any] | None:
         return None
     try:
         values = filters.get_column_values(column)
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         return None
     if values is None:
         return None
@@ -93,7 +93,7 @@ def _time_bounds(
         return None, None
     try:
         bounds = filters.get_column_bounds(column)
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         return None, None
     if bounds is None:
         return None, None

@@ -201,7 +201,7 @@ def _retry_after(exc: HttpError) -> float | None:
     raw = resp.get("retry-after") if resp is not None and hasattr(resp, "get") else None
     try:
         seconds = float(raw) if raw is not None else None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if seconds is None or seconds < 0:
         return None
@@ -242,7 +242,7 @@ def _is_quota_error(exc: HttpError) -> bool:
         payload = json.loads(exc.content.decode("utf-8") if isinstance(exc.content, bytes) else exc.content)
         errors = payload.get("error", {}).get("errors", [])
         reason = " ".join(str(e.get("reason", "")) for e in errors).lower()
-    except (ValueError, AttributeError, TypeError):
+    except ValueError, AttributeError, TypeError:
         reason = ""
     return any(token in reason for token in ("ratelimitexceeded", "quotaexceeded"))
 
@@ -258,7 +258,7 @@ def _format_http_error_from_exc(exc: HttpError) -> str:
     try:
         payload = json.loads(exc.content.decode("utf-8") if isinstance(exc.content, bytes) else exc.content)
         message = str(payload.get("error", {}).get("message", "")).strip()
-    except (ValueError, AttributeError, TypeError):
+    except ValueError, AttributeError, TypeError:
         message = ""
     suffix = f": {message}" if message else ""
     return f"Google API returned HTTP {status}{suffix}"
