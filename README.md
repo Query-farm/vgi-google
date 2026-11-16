@@ -18,7 +18,7 @@ because the hard part — Google auth — is shared.
 
 ```sql
 INSTALL vgi FROM community; LOAD vgi;
-ATTACH 'google' (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.4.1 vgi-google-worker');
+ATTACH 'google' (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.4.2 vgi-google-worker');
 
 -- Sheets: a range as a table (service account must have access, or use an API key for a public sheet)
 SELECT * FROM google.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);
@@ -67,7 +67,7 @@ The worker isn't on PyPI; [uv](https://docs.astral.sh/uv/) runs it straight from
 INSTALL vgi FROM community;
 LOAD vgi;
 
-ATTACH 'google' AS google (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.4.1 vgi-google-worker');
+ATTACH 'google' AS google (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.4.2 vgi-google-worker');
 
 -- Discover the Sheets API's reachable versions via the Discovery Service.
 SELECT name, version, title FROM google.main.google_apis() WHERE name LIKE '%sheets%' ORDER BY name LIMIT 5;
