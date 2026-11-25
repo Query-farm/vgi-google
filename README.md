@@ -16,9 +16,11 @@ API via Google's first-party discovery documents and
 Calendar, YouTube), and a **raw escape hatch** for the long tail. One worker,
 because the hard part — Google auth — is shared.
 
+vgi-google 0.5.0 speaks VGI protocol 3.4, so it needs Haybarn 2.0.1 or newer (Haybarn 2.0.0 loads a 3.3 `vgi` extension that cannot attach it).
+
 ```sql
 INSTALL vgi FROM community; LOAD vgi;
-ATTACH 'google' (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.4.3 vgi-google-worker');
+ATTACH 'google' (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.5.0 vgi-google-worker');
 
 -- Sheets: a range as a table (service account must have access, or use an API key for a public sheet)
 SELECT * FROM google.google_sheet('1AbC...', 'Sheet1!A1:Z', header := true);
@@ -67,7 +69,7 @@ The worker isn't on PyPI; [uv](https://docs.astral.sh/uv/) runs it straight from
 INSTALL vgi FROM community;
 LOAD vgi;
 
-ATTACH 'google' AS google (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.4.3 vgi-google-worker');
+ATTACH 'google' AS google (TYPE vgi, LOCATION 'uvx --from git+https://github.com/Query-farm/vgi-google@v0.5.0 vgi-google-worker');
 
 -- Discover the Sheets API's reachable versions via the Discovery Service.
 SELECT name, version, title FROM google.main.google_apis() WHERE name LIKE '%sheets%' ORDER BY name LIMIT 5;

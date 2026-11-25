@@ -7,7 +7,7 @@
 #   http    the worker serves `--http`, as in Docker deploys
 # One transport only: make test-sql TRANSPORTS=launch
 
-HAYBARN_VERSION  ?= 2.0.0rc11
+HAYBARN_VERSION  ?= 2.0.1rc3
 TOOLS            := $(CURDIR)/.tools
 HAYBARN_UNITTEST := $(TOOLS)/bin/haybarn-unittest
 WORKER           := $(CURDIR)/ci/worker
